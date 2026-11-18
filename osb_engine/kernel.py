@@ -174,11 +174,13 @@ def worktree_changes(repo):
             target = os.readlink(full).encode() if os.path.islink(full) else None
             if target is None or repo.git("hash-object", "--stdin", data=target).decode().strip() != oid:
                 changed.add(path)
-        elif not os.path.isdir(full):
+        else:
+            # Gitlinks: nested checkouts are not compared yet, so fail closed.
             changed.add(path)
     if regular:
         listing = "".join(p + "\n" for p, _ in regular).encode()
-        hashes = repo.git("hash-object", "--stdin-paths", data=listing).decode().split()
+        # Byte-exact: .gitattributes filters (eol, ident, clean) must not normalise tampering away.
+        hashes = repo.git("hash-object", "--no-filters", "--stdin-paths", data=listing).decode().split()
         changed.update(p for (p, oid), h in zip(regular, hashes) if h != oid)
     return changed
 

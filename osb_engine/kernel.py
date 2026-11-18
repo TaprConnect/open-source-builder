@@ -14,6 +14,7 @@ import json
 import os
 import re
 import secrets
+import tempfile
 import time
 
 _KIND = re.compile(r"[a-z][a-z0-9_.-]{0,63}")
@@ -133,27 +134,53 @@ def _finished(conn, project, row):
 
 
 def digest(root, path):
-    """SHA-256 of a worktree file's bytes, or None when absent."""
+    """SHA-256 of a worktree file's bytes (plus its POSIX executable bit), or None when absent."""
+    full = os.path.join(root, *path.split("/"))
     try:
-        with open(os.path.join(root, *path.split("/")), "rb") as handle:
-            return hashlib.sha256(handle.read()).hexdigest()
+        with open(full, "rb") as handle:
+            value = hashlib.sha256(handle.read()).hexdigest()
     except FileNotFoundError:
         return None
+    if os.name == "posix" and os.stat(full).st_mode & 0o111:
+        value += ":x"
+    return value
 
 
 def worktree_changes(repo):
-    """Paths Git reports as modified, staged or untracked (ignored files excluded)."""
-    entries = repo.git("status", "--porcelain=v1", "-z", "--untracked-files=all").split(b"\0")
-    paths, i = set(), 0
-    while i < len(entries):
-        entry = entries[i]
-        if entry:
-            paths.add(os.fsdecode(entry[3:]))
-            if entry[:1] in (b"R", b"C"):
-                i += 1
-                paths.add(os.fsdecode(entries[i]))
-        i += 1
-    return paths
+    """Paths whose worktree content or mode differs from the pinned revision, plus every
+    untracked path. Independent of the live index, Git's stat cache and ignore rules."""
+    root = str(repo.root)
+    with tempfile.TemporaryDirectory() as tmp:
+        env = {"GIT_INDEX_FILE": os.path.join(tmp, "index")}
+        repo.git("read-tree", repo.revision, extra_env=env)
+        others = repo.git("ls-files", "-z", "--others", extra_env=env)
+    changed = {os.fsdecode(p).rstrip("/") for p in others.split(b"\0") if p}
+    regular = []
+    for entry in repo.git("ls-tree", "-r", "-z", "--full-tree", repo.revision).split(b"\0"):
+        if not entry:
+            continue
+        header, raw = entry.split(b"\t", 1)
+        mode, _, oid = header.decode("ascii").split()
+        path = os.fsdecode(raw)
+        full = os.path.join(root, *path.split("/"))
+        if mode in ("100644", "100755"):
+            if "\n" in path or os.path.islink(full) or not os.path.isfile(full):
+                changed.add(path)
+            elif os.name == "posix" and bool(os.stat(full).st_mode & 0o111) != (mode == "100755"):
+                changed.add(path)
+            else:
+                regular.append((path, oid))
+        elif mode == "120000":
+            target = os.readlink(full).encode() if os.path.islink(full) else None
+            if target is None or repo.git("hash-object", "--stdin", data=target).decode().strip() != oid:
+                changed.add(path)
+        elif not os.path.isdir(full):
+            changed.add(path)
+    if regular:
+        listing = "".join(p + "\n" for p, _ in regular).encode()
+        hashes = repo.git("hash-object", "--stdin-paths", data=listing).decode().split()
+        changed.update(p for (p, oid), h in zip(regular, hashes) if h != oid)
+    return changed
 
 
 def integrity(store, conn):
@@ -220,8 +247,13 @@ def _operation(kind, paths):
     return {"kind": kind, "paths": sorted({_path(p) for p in paths})}
 
 
+_GIT_CONTROL = {".gitignore", ".gitattributes", ".gitmodules"}
+
+
 def _covered(path, granted):
-    return any(path == g or g.endswith("/") and path.startswith(g) for g in granted)
+    """Exact grants cover a path; directory grants never cover Git control files."""
+    control = path.rstrip("/").rsplit("/", 1)[-1].lower() in _GIT_CONTROL
+    return any(path == g or not control and g.endswith("/") and path.startswith(g) for g in granted)
 
 
 def _revoked(conn, project, generation):
@@ -279,6 +311,8 @@ def _lease(store, run_id, task_id, seconds, renewal=None):
         if renewal is None:
             if row and row[:2] == (run_id, task_id) and row[4] > now:
                 raise ValueError("task already reserved")
+            if _paused(conn, project):
+                raise ValueError("project dispatch paused")
             if completed(conn, project, run_id, task_id):
                 raise ValueError("task already completed")
             missing = [r for (r,) in conn.execute("""SELECT requires FROM kernel_dependencies_v1

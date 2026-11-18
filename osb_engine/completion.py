@@ -94,6 +94,8 @@ def verify(store, run_id, task_id, generation, acceptance, timeout=600):
     with conn:
         conn.execute("BEGIN IMMEDIATE")
         _schema(conn)
+        if _paused(conn, project):
+            raise ValueError("project dispatch paused")
         if _frozen(conn, project, run_id, task_id) != _sha(acceptance):
             raise ValueError("acceptance differs from the frozen contract")
         plan = _live(store, run_id, task_id, generation)

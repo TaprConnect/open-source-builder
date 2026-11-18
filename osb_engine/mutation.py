@@ -53,6 +53,8 @@ def _changes(repo, patch):
         if len(fields) != 3 or not fields[2] or fields[0] == b"-":
             raise ValueError("binary, renamed or malformed patch entry")
         paths.append(_path(fields[2].decode("utf-8", "strict")))
+    if len(paths) != len(set(paths)):
+        raise ValueError("a path may appear only once per patch")
     if not paths or set(kinds) - set(paths):
         raise ValueError("patch changes no files")
     return {p: kinds.get(p, "edit") for p in paths}

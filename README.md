@@ -18,3 +18,7 @@ For a connected chat, provide the repository link and ask the agent to read AGEN
 This initial implementation provides a snapshot inventory, source-line counts, candidate unfinished-code indicators and local evidence verification. Human or agent review still has to establish product intent and trace user journeys. Binary files, symlinks, submodules, non-UTF-8 text and oversized blobs receive explicit coverage states. Indexing never certifies semantic review.
 
 Provider adapters, metered reasoning enforcement, hosted collaboration, automatic repairs, design generation, jurisdiction updates, tax calculations and production deployment verification remain future work. This release has no enterprise assurance or coverage certification.
+
+## Verify a repair
+
+In a disposable sandbox run `python verifier.py REPO BEFORE AFTER ACCEPTANCE.py RECEIPT.json`. Supply a trusted acceptance script outside the target tree. Use exit 42 to identify the expected baseline failure and exit 0 for success. Review the receipt before making a release decision. Git worktrees isolate source files only. Run untrusted code inside a separate sandbox with no credentials.

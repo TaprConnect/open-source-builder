@@ -107,3 +107,44 @@ class MutationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "out-of-band"):
             self.mutate(b"--- a/h.py\n+++ b/h.py\n@@ -1 +1 @@\n-h = 1\n+h = 2\n")
         self.assertEqual(self.rows(), 1)
+
+
+class LegacyApplyTests(unittest.TestCase):
+    """S02-009: the pre-kernel apply command cannot silently feed kernel-governed work."""
+
+    def test_legacy_apply_is_detected_as_out_of_band(self):
+        from osb_engine.repair import apply_prepared, check_patch
+        from osb_engine.kernel import dispatch
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            main, linked = parent / "main", parent / "linked"
+            main.mkdir()
+            git = lambda cwd, *a: subprocess.run(["git", "-C", str(cwd), "-c", "user.name=F",
+                                                  "-c", "user.email=f@example.invalid",
+                                                  "-c", "core.autocrlf=false", *a],
+                                                 check=True, capture_output=True)
+            git(main, "init")
+            (main / "a.py").write_bytes(b"def a(): pass\n")
+            git(main, "add", ".")
+            git(main, "commit", "-m", "fixture")
+            git(main, "worktree", "add", "--detach", str(linked))
+            store = Store(Repository(linked), parent / "private.sqlite")
+            try:
+                report, _ = scan(store.repo, store, [])
+                run = store.save(report)
+                task = report["findings"][0]["id"]
+                lease = reserve(store, run, task, 300)
+                grant(store, run, task, lease["generation"], [("edit", ["a.py"])])
+                declarations = {"a.py": {"action": "modify", "justification": "j",
+                                         "acceptance": "a", "rollback": "r"}}
+                receipt = check_patch(store.repo, EDIT, declarations, b"assert True\n")
+                apply_prepared(store.repo, EDIT, declarations, b"assert True\n", receipt["approval_id"])
+                self.assertEqual((linked / "a.py").read_bytes(), b"def a(): return 1\n")
+                with self.assertRaisesRegex(ValueError, "out-of-band"):
+                    mutation.mutate(store, run, task, lease["generation"], lease["token"],
+                                    b"--- a/a.py\n+++ b/a.py\n@@ -1 +1 @@\n-def a(): return 1\n+def a(): return 2\n")
+                with self.assertRaisesRegex(ValueError, "out-of-band"):
+                    dispatch(store, run, task, lease["generation"], lease["token"], "edit", ["a.py"])
+                self.assertEqual(store.conn.execute("SELECT COUNT(*) FROM kernel_dispatches_v1").fetchone()[0], 0)
+            finally:
+                store.conn.close()

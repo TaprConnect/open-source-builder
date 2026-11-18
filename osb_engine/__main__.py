@@ -7,6 +7,7 @@ import subprocess
 import sys
 from .kernel import dispatch, grant, pause, renew, reserve, resume, revoke
 from .completion import complete, depend, freeze, release, verify
+from .isolation import run_worker
 from .mutation import mutate
 from .repository import Repository
 from .store import Store
@@ -88,6 +89,17 @@ def main(argv=None):
             c.add_argument('--revert', action='store_true')
         if command == 'depend':
             c.add_argument('requires')
+    worker = sub.add_parser('run-worker', description=(
+        "Trusted supervisor only. Runs the worker command isolated (Linux bubblewrap), then applies "
+        "outbox *.patch files through mutate with the bearer read from stdin."
+    ))
+    for field in ('repository', 'database', 'run_id', 'task_id'):
+        worker.add_argument(field)
+    worker.add_argument('generation', type=int)
+    worker.add_argument('outbox')
+    worker.add_argument('--input', action='append', default=[], metavar='NAME=PATH')
+    worker.add_argument('--timeout', type=int, default=600)
+    worker.add_argument('argv', nargs=argparse.REMAINDER)
     for command in ('pause', 'resume'):
         control = sub.add_parser(command, description="Trusted supervisor only.")
         control.add_argument('repository')
@@ -139,6 +151,14 @@ def main(argv=None):
                     output = release(store, a.run_id, a.task_id, a.generation, a.reason, a.revert)
                 elif a.command == 'depend':
                     output = depend(store, a.run_id, a.task_id, a.requires)
+                elif a.command == 'run-worker':
+                    token = sys.stdin.readline(128).rstrip('\r\n')
+                    argv = a.argv[1:] if a.argv[:1] == ['--'] else a.argv
+                    inputs = dict(item.split('=', 1) for item in a.input if '=' in item)
+                    if len(inputs) != len(a.input):
+                        raise ValueError('inputs must be NAME=PATH')
+                    output = run_worker(store, a.run_id, a.task_id, a.generation, token,
+                                        a.outbox, argv, inputs, a.timeout)
                 elif a.command in ('pause', 'resume'):
                     output = (pause if a.command == 'pause' else resume)(store, a.reason)
                 elif a.command=='status':

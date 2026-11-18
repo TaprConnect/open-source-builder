@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 import sqlite3
 import subprocess
+import sys
+from .kernel import reserve, renew
 from .repository import Repository
 from .store import Store
 from .audit import scan
@@ -34,6 +36,16 @@ def main(argv=None):
         if name=='apply':
             p.add_argument('--approval-id',required=True)
             p.add_argument('--allow-remove',action='store_true')
+    for command in ('reserve', 'renew'):
+        lease = sub.add_parser(command, description=(
+            "Trusted supervisor only. Share one private database across the project's "
+            "workers. Reserve returns a private bearer. Renew reads it from stdin."
+        ))
+        for field in ('repository', 'database', 'run_id', 'task_id'):
+            lease.add_argument(field)
+        if command == 'renew':
+            lease.add_argument('generation', type=int)
+        lease.add_argument('seconds', type=int)
     a=parser.parse_args(argv)
     try:
         repo=Repository(a.repository)
@@ -48,6 +60,11 @@ def main(argv=None):
                     output={'report':report,'metrics':metrics}
                     if a.command=='plan':
                         output['run_id']=store.save(report)
+                elif a.command == 'reserve':
+                    output = reserve(store, a.run_id, a.task_id, a.seconds)
+                elif a.command == 'renew':
+                    token = sys.stdin.readline(128).rstrip('\r\n')
+                    output = renew(store, a.run_id, a.task_id, a.generation, a.seconds, token)
                 elif a.command=='status':
                     output=store.view(a.run_id)
                 else:

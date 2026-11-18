@@ -23,6 +23,12 @@ class Store:
             raise ValueError('create an external private directory first')
         if os.name == 'posix' and path.parent.stat().st_mode & 0o077:
             raise ValueError('private directory must not grant group or other access (chmod 700)')
+        if os.name == 'nt':
+            from .winacl import unexpected_principals
+            if unexpected_principals(path.parent):
+                raise ValueError('private directory ACL grants access beyond the owner, SYSTEM and Administrators')
+            if path.exists() and unexpected_principals(path):
+                raise ValueError('private database ACL grants access beyond the owner, SYSTEM and Administrators')
         flags = os.O_CREAT | os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0)
         fd = os.open(path, flags, 0o600)
         try:

@@ -149,4 +149,3 @@ def mutate(store, run_id, task_id, generation, token, patch):
               json.dumps(operation, sort_keys=True, separators=(",", ":")), time.time_ns())).lastrowid
     return {"applied": True, "dispatch": seq, "run_id": run_id, "task_id": task_id,
             "generation": generation, "revision": plan["revision"], "operation": operation}
-

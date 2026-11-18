@@ -5,7 +5,7 @@ from pathlib import Path
 import sqlite3
 import subprocess
 import sys
-from .kernel import reserve, renew
+from .kernel import dispatch, grant, pause, renew, reserve, resume, revoke
 from .repository import Repository
 from .store import Store
 from .audit import scan
@@ -46,6 +46,27 @@ def main(argv=None):
         if command == 'renew':
             lease.add_argument('generation', type=int)
         lease.add_argument('seconds', type=int)
+    for command in ('grant', 'revoke', 'dispatch'):
+        gate = sub.add_parser(command, description=(
+            "Trusted supervisor only. Dispatch reads the private bearer from stdin and "
+            "admits one controlled mutation immediately before it runs."
+        ))
+        for field in ('repository', 'database', 'run_id', 'task_id'):
+            gate.add_argument(field)
+        gate.add_argument('generation', type=int)
+        if command == 'grant':
+            gate.add_argument('--operation', action='append', nargs='+', required=True,
+                              metavar=('KIND', 'PATH'))
+        elif command == 'revoke':
+            gate.add_argument('--reason', required=True)
+        else:
+            gate.add_argument('kind')
+            gate.add_argument('paths', nargs='*')
+    for command in ('pause', 'resume'):
+        control = sub.add_parser(command, description="Trusted supervisor only.")
+        control.add_argument('repository')
+        control.add_argument('database')
+        control.add_argument('--reason', required=True)
     a=parser.parse_args(argv)
     try:
         repo=Repository(a.repository)
@@ -65,6 +86,17 @@ def main(argv=None):
                 elif a.command == 'renew':
                     token = sys.stdin.readline(128).rstrip('\r\n')
                     output = renew(store, a.run_id, a.task_id, a.generation, a.seconds, token)
+                elif a.command == 'grant':
+                    output = grant(store, a.run_id, a.task_id, a.generation,
+                                   [(op[0], op[1:]) for op in a.operation])
+                elif a.command == 'revoke':
+                    output = revoke(store, a.run_id, a.task_id, a.generation, a.reason)
+                elif a.command == 'dispatch':
+                    token = sys.stdin.readline(128).rstrip('\r\n')
+                    output = dispatch(store, a.run_id, a.task_id, a.generation, token,
+                                      a.kind, a.paths)
+                elif a.command in ('pause', 'resume'):
+                    output = (pause if a.command == 'pause' else resume)(store, a.reason)
                 elif a.command=='status':
                     output=store.view(a.run_id)
                 else:

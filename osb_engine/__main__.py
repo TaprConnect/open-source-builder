@@ -17,6 +17,11 @@ from .repair import check_patch, apply_prepared
 
 
 def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    worker_argv = []
+    if argv[:1] == ['run-worker'] and '--' in argv:
+        split = argv.index('--')
+        argv, worker_argv = argv[:split], argv[split + 1:]
     parser=argparse.ArgumentParser(description=__doc__)
     sub=parser.add_subparsers(dest='command',required=True)
     for name in ('audit','plan','status','transition','preview','apply'):
@@ -99,7 +104,7 @@ def main(argv=None):
     worker.add_argument('outbox')
     worker.add_argument('--input', action='append', default=[], metavar='NAME=PATH')
     worker.add_argument('--timeout', type=int, default=600)
-    worker.add_argument('argv', nargs=argparse.REMAINDER)
+    worker.epilog = "Place the worker command after a literal --."
     for command in ('pause', 'resume'):
         control = sub.add_parser(command, description="Trusted supervisor only.")
         control.add_argument('repository')
@@ -153,12 +158,11 @@ def main(argv=None):
                     output = depend(store, a.run_id, a.task_id, a.requires)
                 elif a.command == 'run-worker':
                     token = sys.stdin.readline(128).rstrip('\r\n')
-                    argv = a.argv[1:] if a.argv[:1] == ['--'] else a.argv
                     inputs = dict(item.split('=', 1) for item in a.input if '=' in item)
                     if len(inputs) != len(a.input):
                         raise ValueError('inputs must be NAME=PATH')
                     output = run_worker(store, a.run_id, a.task_id, a.generation, token,
-                                        a.outbox, argv, inputs, a.timeout)
+                                        a.outbox, worker_argv, inputs, a.timeout)
                 elif a.command in ('pause', 'resume'):
                     output = (pause if a.command == 'pause' else resume)(store, a.reason)
                 elif a.command=='status':

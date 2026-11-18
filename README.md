@@ -26,3 +26,7 @@ In a disposable sandbox run `python verifier.py REPO BEFORE AFTER ACCEPTANCE.py 
 ## Deep-review checkpoint
 
 Save a private JSON ledger with the pinned revision and inclusive line ranges actually reviewed. Example shape: `{"revision":"<full commit id>","files":{"src/app.ts":[[1,100],[101,180]]}}`. Run `python coverage.py REPO ledger.json`. Exit 1 means ranges or blocked files remain. A clean ledger verifies interval coverage of the supplied attestations only. It cannot attest to human or model comprehension.
+
+## Review profiles
+
+The tab-separated catalogue in profiles/checks.tsv gives applicability conditions, required evidence and expected outcomes across product and engineering disciplines. These are review criteria. The local scanner does not automatically execute each profile. CI runs the included regression tests and snapshot scanner.

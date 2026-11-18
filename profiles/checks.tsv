@@ -1,0 +1,21 @@
+domain	activates_when	evidence	required_outcome
+Identity	private workspace exists	server session and recovery path	revoked sessions lose access
+Tenancy	records belong to organisations	queries and policy migrations	owner succeeds and other tenant is denied
+Persistence	save is promised	write handler and fresh read	saved record survives restart
+Backend	API has a consumer	contract and handler	malformed request has actionable error
+Frontend	interactive controls exist	browser interaction	success failure loading and retry rendered
+Motion	animated transitions exist	reduced motion setting	controls remain usable with animation disabled
+Accessibility	interactive UI exists	keyboard journey	focus reaches controls and returns after modal close
+Jobs	background job produced	queue and worker	interrupted task resumes once
+Billing	paid plan offered	entitlement and payment events	duplicate event grants only one entitlement
+Database	migration present	before and after data fixtures	upgrade preserves existing records
+AI	model generates customer output	evaluation cases and refusal cases	output cites accessible supporting evidence
+Agent	tools perform external writes	action approval and receipt	approval binds arguments and identity
+Privacy	deletion promised	storage processors and index	deletion reaches each promised destination
+ML	training performed	data splits and model version	held-out evaluation is reproducible
+Operations	backup promised	restore test	restored deployment opens representative record
+Release	production readiness claimed	build and deployment commit IDs	customer-facing environment matches tested revision
+Security	shipped client bundle exists	release manifest	client contains only intended public configuration
+UX	reference design approved	desktop mobile and keyboard evidence	approved interaction works at all agreed sizes
+Pricing	AI bundled into subscription	dated provider prices and cost per successful task	retries included in allowance
+Jurisdiction	policy drafted	markets entity and official effective dates	owner reviews applicability and data flows

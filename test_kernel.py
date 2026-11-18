@@ -19,10 +19,10 @@ class ReservationTests(unittest.TestCase):
             target.mkdir()
             def git(*args):
                 subprocess.run(["git", "-C", str(target), "-c", "user.name=Fixture",
-                                "-c", "user.email=test@example.invalid", *args],
+                                "-c", "user.email=test@example.invalid", "-c", "core.autocrlf=false", *args],
                                check=True, capture_output=True)
             git("init")
-            (target / "module.py").write_text("def first(): pass\ndef second(): pass\n")
+            (target / "module.py").write_bytes(b"def first(): pass\ndef second(): pass\n")
             git("add", "module.py")
             git("commit", "-m", "fixture")
             repo = Repository(target)

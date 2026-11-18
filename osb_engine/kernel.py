@@ -28,6 +28,32 @@ def _project(store):
     return os.path.normcase(str(store.repo.common))
 
 
+_EXTRA_TABLES = (
+    """CREATE TABLE IF NOT EXISTS kernel_patches_v1 (
+            dispatch INTEGER PRIMARY KEY, project TEXT NOT NULL, run_id TEXT NOT NULL,
+            task_id TEXT NOT NULL, generation INTEGER NOT NULL, patch BLOB NOT NULL,
+            paths TEXT NOT NULL, reverted INTEGER NOT NULL DEFAULT 0)""",
+    """CREATE TABLE IF NOT EXISTS kernel_acceptance_v1 (
+            project TEXT NOT NULL, run_id TEXT NOT NULL, task_id TEXT NOT NULL,
+            digest TEXT NOT NULL, PRIMARY KEY(project, run_id, task_id))""",
+    """CREATE TABLE IF NOT EXISTS kernel_verifications_v1 (
+            seq INTEGER PRIMARY KEY, project TEXT NOT NULL, run_id TEXT NOT NULL,
+            task_id TEXT NOT NULL, generation INTEGER NOT NULL, revision TEXT NOT NULL,
+            acceptance TEXT NOT NULL, state TEXT NOT NULL, returncode INTEGER NOT NULL,
+            passed INTEGER NOT NULL, output_sha256 TEXT NOT NULL, time_ns INTEGER NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS kernel_completions_v1 (
+            project TEXT NOT NULL, run_id TEXT NOT NULL, task_id TEXT NOT NULL,
+            generation INTEGER NOT NULL, revision TEXT NOT NULL, verification INTEGER NOT NULL,
+            state TEXT NOT NULL, time_ns INTEGER NOT NULL, PRIMARY KEY(project, run_id, task_id))""",
+    """CREATE TABLE IF NOT EXISTS kernel_releases_v1 (
+            project TEXT NOT NULL, generation INTEGER NOT NULL, run_id TEXT NOT NULL,
+            task_id TEXT NOT NULL, reason TEXT NOT NULL, PRIMARY KEY(project, generation))""",
+    """CREATE TABLE IF NOT EXISTS kernel_dependencies_v1 (
+            project TEXT NOT NULL, run_id TEXT NOT NULL, task_id TEXT NOT NULL,
+            requires TEXT NOT NULL, PRIMARY KEY(project, run_id, task_id, requires))""",
+)
+
+
 def _schema(conn):
     conn.execute("""
         CREATE TABLE IF NOT EXISTS kernel_reservations_v1 (
@@ -90,6 +116,20 @@ def _schema(conn):
             PRIMARY KEY(project, path)
         )
     """)
+    for statement in _EXTRA_TABLES:
+        conn.execute(statement)
+
+
+def completed(conn, project, run_id, task_id):
+    return conn.execute("""SELECT 1 FROM kernel_completions_v1
+        WHERE project=? AND run_id=? AND task_id=?""", (project, run_id, task_id)).fetchone() is not None
+
+
+def _finished(conn, project, row):
+    """True when the slot holder completed its task or the supervisor released this generation."""
+    return completed(conn, project, row[0], row[1]) or conn.execute(
+        "SELECT 1 FROM kernel_releases_v1 WHERE project=? AND generation=?",
+        (project, row[2])).fetchone() is not None
 
 
 def digest(root, path):
@@ -232,13 +272,22 @@ def _lease(store, run_id, task_id, seconds, renewal=None):
             SELECT run_id, task_id, generation, token_hash, expires_ns
             FROM kernel_reservations_v1 WHERE project = ?
         """, (project,)).fetchone()
-        if row and row[:2] != (run_id, task_id):
+        if row and row[:2] != (run_id, task_id) and not _finished(conn, project, row):
             raise ValueError("another task retains this project reservation")
         now = time.time_ns()
         expires = now + seconds * 1_000_000_000
         if renewal is None:
-            if row and row[4] > now:
+            if row and row[:2] == (run_id, task_id) and row[4] > now:
                 raise ValueError("task already reserved")
+            if completed(conn, project, run_id, task_id):
+                raise ValueError("task already completed")
+            missing = [r for (r,) in conn.execute("""SELECT requires FROM kernel_dependencies_v1
+                WHERE project=? AND run_id=? AND task_id=?""", (project, run_id, task_id))
+                if not completed(conn, project, run_id, r)]
+            if missing:
+                raise ValueError("prerequisite tasks are not completed")
+            if integrity(store, conn):
+                raise ValueError("out-of-band worktree changes detected")
             generation = row[2] + 1 if row else 1
             token = secrets.token_urlsafe(32)
             conn.execute("""
@@ -246,6 +295,7 @@ def _lease(store, run_id, task_id, seconds, renewal=None):
                     (project, run_id, task_id, generation, token_hash, expires_ns)
                 VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(project) DO UPDATE SET
+                    run_id=excluded.run_id, task_id=excluded.task_id,
                     generation=excluded.generation, token_hash=excluded.token_hash,
                     expires_ns=excluded.expires_ns
             """, (project, run_id, task_id, generation, _token_hash(token), expires))

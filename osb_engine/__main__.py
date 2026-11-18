@@ -6,6 +6,7 @@ import sqlite3
 import subprocess
 import sys
 from .kernel import dispatch, grant, pause, renew, reserve, resume, revoke
+from .completion import complete, depend, freeze, release, verify
 from .mutation import mutate
 from .repository import Repository
 from .store import Store
@@ -71,6 +72,22 @@ def main(argv=None):
         mutate_parser.add_argument(field)
     mutate_parser.add_argument('generation', type=int)
     mutate_parser.add_argument('patch')
+    completion_help = "Trusted supervisor only, except complete, which reads the holder's bearer from stdin."
+    for command in ('freeze', 'verify', 'complete', 'release', 'depend'):
+        c = sub.add_parser(command, description=completion_help)
+        for field in ('repository', 'database', 'run_id', 'task_id'):
+            c.add_argument(field)
+        if command in ('verify', 'complete', 'release'):
+            c.add_argument('generation', type=int)
+        if command in ('freeze', 'verify'):
+            c.add_argument('acceptance')
+        if command == 'verify':
+            c.add_argument('--timeout', type=int, default=600)
+        if command == 'release':
+            c.add_argument('--reason', required=True)
+            c.add_argument('--revert', action='store_true')
+        if command == 'depend':
+            c.add_argument('requires')
     for command in ('pause', 'resume'):
         control = sub.add_parser(command, description="Trusted supervisor only.")
         control.add_argument('repository')
@@ -108,6 +125,20 @@ def main(argv=None):
                     token = sys.stdin.readline(128).rstrip('\r\n')
                     output = mutate(store, a.run_id, a.task_id, a.generation, token,
                                     repo.private_path(a.patch).read_bytes())
+                elif a.command == 'freeze':
+                    output = freeze(store, a.run_id, a.task_id, repo.private_path(a.acceptance).read_bytes())
+                elif a.command == 'verify':
+                    if not 1 <= a.timeout <= 3600:
+                        raise ValueError('verification timeout must be 1 to 3600 seconds')
+                    output = verify(store, a.run_id, a.task_id, a.generation,
+                                    repo.private_path(a.acceptance).read_bytes(), a.timeout)
+                elif a.command == 'complete':
+                    token = sys.stdin.readline(128).rstrip('\r\n')
+                    output = complete(store, a.run_id, a.task_id, a.generation, token)
+                elif a.command == 'release':
+                    output = release(store, a.run_id, a.task_id, a.generation, a.reason, a.revert)
+                elif a.command == 'depend':
+                    output = depend(store, a.run_id, a.task_id, a.requires)
                 elif a.command in ('pause', 'resume'):
                     output = (pause if a.command == 'pause' else resume)(store, a.reason)
                 elif a.command=='status':

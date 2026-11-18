@@ -147,5 +147,9 @@ def mutate(store, run_id, task_id, generation, token, patch):
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (project, run_id, task_id, generation, plan["revision"],
               json.dumps(operation, sort_keys=True, separators=(",", ":")), time.time_ns())).lastrowid
+        conn.execute("""
+            INSERT INTO kernel_patches_v1 (dispatch, project, run_id, task_id, generation, patch, paths)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (seq, project, run_id, task_id, generation, patch, json.dumps(sorted(changes))))
     return {"applied": True, "dispatch": seq, "run_id": run_id, "task_id": task_id,
             "generation": generation, "revision": plan["revision"], "operation": operation}

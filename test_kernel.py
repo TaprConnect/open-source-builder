@@ -85,7 +85,9 @@ class DispatchGateTests(unittest.TestCase):
             gen, token = lease["generation"], lease["token"]
             with self.assertRaises(ValueError):
                 dispatch(store, self.run_id, self.first, gen, token, "edit", ["module.py"])
-            for bad in ("/abs", "../x", "a/../b", ".git/config", ".GIT/x", "", "./a", "a\\b"):
+            for bad in ("/abs", "../x", "a/../b", ".git/config", ".GIT/x", "", "./a", "a\\b",
+                        "GIT~1/config", ".git./config", "a.py::$DATA", "CON", "nul.txt",
+                        "a.py.", "a.py ", "x/.Git/HEAD", "café.py"):
                 with self.assertRaises(ValueError):
                     grant(store, self.run_id, self.first, gen, [("edit", [bad])])
             with self.assertRaises(ValueError):

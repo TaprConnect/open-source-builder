@@ -86,13 +86,25 @@ def _reason(reason):
     return reason
 
 
+_COMPONENT = re.compile(r"[A-Za-z0-9._-]{1,255}")
+_DEVICE = re.compile(r"(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?")
+
+
 def _path(path):
-    if type(path) is not str or not path or len(path) > 4096 or "\0" in path or "\\" in path:
+    """Accept one portable spelling per file so OS aliases cannot widen a grant.
+
+    ASCII letters, digits, '.', '_' and '-' only. Rejects traversal, empty and
+    trailing-dot components, Windows device names, and any .git component.
+    This excludes 8.3 short names, NTFS streams and Unicode normalisation aliases.
+    """
+    if type(path) is not str or not path or len(path) > 4096:
         raise ValueError("invalid operation path")
     parts = (path[:-1] if path.endswith("/") else path).split("/")
-    if (path.startswith("/") or any(p in ("", ".", "..") for p in parts)
-            or parts[0].lower() == ".git"):
-        raise ValueError("operation path must be normalised, relative and outside .git")
+    for part in parts:
+        folded = part.lower()
+        if (not _COMPONENT.fullmatch(part) or part in (".", "..") or part.endswith(".")
+                or folded == ".git" or _DEVICE.fullmatch(folded)):
+            raise ValueError("operation path must be a normalised portable path outside .git")
     return path
 
 

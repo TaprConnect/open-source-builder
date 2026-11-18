@@ -22,3 +22,7 @@ Provider adapters, metered reasoning enforcement, hosted collaboration, automati
 ## Verify a repair
 
 In a disposable sandbox run `python verifier.py REPO BEFORE AFTER ACCEPTANCE.py RECEIPT.json`. Supply a trusted acceptance script outside the target tree. Use exit 42 to identify the expected baseline failure and exit 0 for success. Review the receipt before making a release decision. Git worktrees isolate source files only. Run untrusted code inside a separate sandbox with no credentials.
+
+## Deep-review checkpoint
+
+Save a private JSON ledger with the pinned revision and inclusive line ranges actually reviewed. Example shape: `{"revision":"<full commit id>","files":{"src/app.ts":[[1,100],[101,180]]}}`. Run `python coverage.py REPO ledger.json`. Exit 1 means ranges or blocked files remain. A clean ledger verifies interval coverage of the supplied attestations only. It cannot attest to human or model comprehension.

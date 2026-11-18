@@ -1,0 +1,57 @@
+import json
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+from repair import repair
+from readiness import manifest_checks, route_findings
+
+
+class ApplicationTests(unittest.TestCase):
+    def test_public_site_has_no_auth_requirement(self):
+        self.assertEqual(route_findings("page.ts", "", set()), [])
+
+    def test_present_auth_is_not_verified(self):
+        finding, = route_findings("route.ts", "// auth() may be unused", {"auth"})
+        self.assertEqual(finding["status"], "candidate_evidence_requires_trace")
+
+    def test_malformed_manifest(self):
+        for source in ["null", "{", '{"scripts":[]}', '{"dependencies":null}']:
+            with self.subTest(source=source):
+                findings, patch = manifest_checks("package.json", source, set())
+                self.assertEqual(findings[0]["status"], "invalid_manifest")
+                self.assertIsNone(patch)
+
+    def test_existing_scripts_preserved(self):
+        findings, patch = manifest_checks("package.json", '{"scripts":{"lint":"check","build":"custom"},"dependencies":{"next":"1"}}', set())
+        self.assertEqual((findings, patch), ([], None))
+
+    def test_cli_and_applicable_patch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            def git(*args, **kw):
+                return subprocess.run(["git", *args], cwd=root, check=True, capture_output=True, **kw)
+            git("init")
+            path = "app/api/projects/route.ts"
+            (root / path).parent.mkdir(parents=True)
+            (root / path).write_text("const records = new Map();\n")
+            (root / "package.json").write_text('{"dependencies":{"next":"1","eslint":"1"}}\n')
+            (root / "eslint.config.mjs").touch()
+            git("add", ".")
+            git("-c", "user.name=Tests", "-c", "user.email=tests@localhost", "commit", "-m", "fixture")
+            args = [sys.executable, str(Path(__file__).with_name("scanner.py").resolve()), tmp,
+                    "--include-manifest-patches", "--private-route", path, "--durable-route", path, "--durable-route", "missing.ts"]
+            report = json.loads(subprocess.check_output(args))["readiness"]
+            self.assertEqual(report["route_candidates"], [path])
+            statuses = {f["status"] for f in report["findings"]}
+            self.assertTrue({"in_memory_storage_requires_trace", "no_direct_evidence", "missing_declared_path"} <= statuses)
+            patch = report["proposed_manifest_patches"][0]["patch"]
+            git("apply", "--check", "-", input=patch.encode())
+            self.assertEqual(repair(tmp), ["package.json"])
+            self.assertEqual(repair(tmp, apply=True), ["package.json"])
+            with self.assertRaises(ValueError):
+                repair(tmp, apply=True)
+            self.assertEqual(json.loads((root / "package.json").read_text())["scripts"],
+                             {"lint": "eslint .", "build": "next build"})

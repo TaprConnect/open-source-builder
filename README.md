@@ -30,3 +30,17 @@ Save a private JSON ledger with the pinned revision and inclusive line ranges ac
 ## Review profiles
 
 The tab-separated catalogue in profiles/checks.tsv gives applicability conditions, required evidence and expected outcomes across product and engineering disciplines. These are review criteria. The local scanner does not automatically execute each profile. CI runs the included regression tests and snapshot scanner.
+
+## Check application readiness
+
+Run the normal scanner to inventory candidate Next.js handlers and inspect Node package scripts. Identify routes that actually promise private access or durable writes:
+
+```sh
+python scanner.py ../my-app --private-route app/api/projects/route.ts --durable-route app/api/projects/route.ts
+python repair.py ../my-app
+python repair.py ../my-app --apply
+```
+
+The repair command previews by default. In a clean checkout it can add missing Next.js build and ESLint lint scripts where the corresponding dependency (and lint configuration) is present. Inspect the diff and run the project's checks in an isolated environment. The command does not install packages or run target scripts. Optional scanner flag `--include-manifest-patches` includes source context in the private report.
+
+Auth and storage findings are lexical leads. Comments can match, delegated middleware can be missed, and package scripts can delegate to workspace or CI tooling. Trace the handler and run the supplied acceptance procedure before classifying a defect. No static result grants a security or deployment pass. See the [design, motion and assurance catalogue](profiles/design-references.md).

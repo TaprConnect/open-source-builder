@@ -6,6 +6,7 @@ import sqlite3
 import subprocess
 import sys
 from .kernel import dispatch, grant, pause, renew, reserve, resume, revoke
+from .mutation import mutate
 from .repository import Repository
 from .store import Store
 from .audit import scan
@@ -62,6 +63,14 @@ def main(argv=None):
         else:
             gate.add_argument('kind')
             gate.add_argument('paths', nargs='*')
+    mutate_parser = sub.add_parser('mutate', description=(
+        "Trusted supervisor only. Reads the worker bearer from stdin and applies one "
+        "private patch file after checking lease, revision, scope and worktree integrity."
+    ))
+    for field in ('repository', 'database', 'run_id', 'task_id'):
+        mutate_parser.add_argument(field)
+    mutate_parser.add_argument('generation', type=int)
+    mutate_parser.add_argument('patch')
     for command in ('pause', 'resume'):
         control = sub.add_parser(command, description="Trusted supervisor only.")
         control.add_argument('repository')
@@ -95,6 +104,10 @@ def main(argv=None):
                     token = sys.stdin.readline(128).rstrip('\r\n')
                     output = dispatch(store, a.run_id, a.task_id, a.generation, token,
                                       a.kind, a.paths)
+                elif a.command == 'mutate':
+                    token = sys.stdin.readline(128).rstrip('\r\n')
+                    output = mutate(store, a.run_id, a.task_id, a.generation, token,
+                                    repo.private_path(a.patch).read_bytes())
                 elif a.command in ('pause', 'resume'):
                     output = (pause if a.command == 'pause' else resume)(store, a.reason)
                 elif a.command=='status':

@@ -55,7 +55,7 @@ class DispatchGateTests(unittest.TestCase):
         self.target = parent / "target"
         self.target.mkdir()
         self.git("init")
-        (self.target / "module.py").write_text("def first(): pass\ndef second(): pass\n")
+        (self.target / "module.py").write_bytes(b"def first(): pass\ndef second(): pass\n")
         self.git("add", "module.py")
         self.git("commit", "-m", "fixture")
         self.database = parent / "private.sqlite"
@@ -70,7 +70,7 @@ class DispatchGateTests(unittest.TestCase):
 
     def git(self, *args):
         subprocess.run(["git", "-C", str(self.target), "-c", "user.name=Fixture",
-                        "-c", "user.email=test@example.invalid", *args],
+                        "-c", "user.email=test@example.invalid", "-c", "core.autocrlf=false", *args],
                        check=True, capture_output=True)
 
     def store(self):

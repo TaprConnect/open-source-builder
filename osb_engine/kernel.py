@@ -78,6 +78,69 @@ def _schema(conn):
             time_ns INTEGER NOT NULL
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS kernel_ledger_v1 (
+            project TEXT NOT NULL,
+            path TEXT NOT NULL,
+            baseline TEXT,
+            current TEXT,
+            run_id TEXT NOT NULL,
+            task_id TEXT NOT NULL,
+            generation INTEGER NOT NULL,
+            PRIMARY KEY(project, path)
+        )
+    """)
+
+
+def digest(root, path):
+    """SHA-256 of a worktree file's bytes, or None when absent."""
+    try:
+        with open(os.path.join(root, *path.split("/")), "rb") as handle:
+            return hashlib.sha256(handle.read()).hexdigest()
+    except FileNotFoundError:
+        return None
+
+
+def worktree_changes(repo):
+    """Paths Git reports as modified, staged or untracked (ignored files excluded)."""
+    entries = repo.git("status", "--porcelain=v1", "-z", "--untracked-files=all").split(b"\0")
+    paths, i = set(), 0
+    while i < len(entries):
+        entry = entries[i]
+        if entry:
+            paths.add(os.fsdecode(entry[3:]))
+            if entry[:1] in (b"R", b"C"):
+                i += 1
+                paths.add(os.fsdecode(entries[i]))
+        i += 1
+    return paths
+
+
+def integrity(store, conn):
+    """Return out-of-band changes: unrecorded changed paths or ledger hash mismatches."""
+    ledger = dict(conn.execute("SELECT path, current FROM kernel_ledger_v1 WHERE project=?",
+                               (_project(store),)).fetchall())
+    root = str(store.repo.root)
+    problems = sorted(p for p in worktree_changes(store.repo) if p not in ledger)
+    problems += sorted(p for p, h in ledger.items() if digest(root, p) != h)
+    return problems
+
+
+def granted_scope(conn, project, run_id, task_id, generation, revision):
+    row = conn.execute("""
+        SELECT run_id, task_id, revision, scope FROM kernel_grants_v1
+        WHERE project=? AND generation=?
+    """, (project, generation)).fetchone()
+    if not row or tuple(row[:2]) != (run_id, task_id):
+        raise ValueError("no operation scope granted to this reservation")
+    if row[2] != revision:
+        raise ValueError("grant bound to a different revision")
+    return json.loads(row[3])
+
+
+def covered(kind, paths, scope):
+    granted = [g["paths"] for g in scope if g["kind"] == kind]
+    return all(any(_covered(p, g) for g in granted) for p in paths)
 
 
 def _reason(reason):
@@ -279,17 +342,11 @@ def dispatch(store, run_id, task_id, generation, token, kind, paths):
         if _paused(conn, project):
             raise ValueError("project dispatch paused")
         plan = _live(store, run_id, task_id, generation, token)
-        row = conn.execute("""
-            SELECT run_id, task_id, revision, scope FROM kernel_grants_v1
-            WHERE project=? AND generation=?
-        """, (project, generation)).fetchone()
-        if not row or tuple(row[:2]) != (run_id, task_id):
-            raise ValueError("no operation scope granted to this reservation")
-        if row[2] != plan["revision"]:
-            raise ValueError("grant bound to a different revision")
-        granted = [g["paths"] for g in json.loads(row[3]) if g["kind"] == operation["kind"]]
-        if not all(any(_covered(p, g) for g in granted) for p in operation["paths"]):
+        scope = granted_scope(conn, project, run_id, task_id, generation, plan["revision"])
+        if not covered(operation["kind"], operation["paths"], scope):
             raise ValueError("operation outside granted scope")
+        if integrity(store, conn):
+            raise ValueError("out-of-band worktree changes detected")
         store.repo.assert_current()
         now = time.time_ns()
         seq = conn.execute("""

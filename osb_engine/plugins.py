@@ -126,6 +126,84 @@ def _functions(tree):
     return out
 
 
+_SOURCE_ATTRS = {"args", "form", "values", "json", "data", "files", "GET", "POST", "query_params", "path_params"}
+_SANITISERS = {"int", "float", "bool", "quote", "basename", "secure_filename", "escape"}
+_SUBPROCESS = {"run", "call", "check_call", "check_output", "Popen"}
+
+
+def _call_name(call):
+    f = call.func
+    return f.id if isinstance(f, ast.Name) else f.attr if isinstance(f, ast.Attribute) else None
+
+
+def _is_request(expr):
+    return (isinstance(expr, ast.Name) and expr.id == "request") or (isinstance(expr, ast.Attribute) and expr.attr == "request")
+
+
+def _tainted(expr, tainted):
+    if expr is None:
+        return False
+    if isinstance(expr, ast.Call):
+        name = _call_name(expr)
+        if name in _SANITISERS:
+            return False
+        if name == "get_json" and isinstance(expr.func, ast.Attribute) and _is_request(expr.func.value):
+            return True
+        if name == "input" and isinstance(expr.func, ast.Name):
+            return True
+        return _tainted(expr.func, tainted) or any(_tainted(a, tainted) for a in expr.args) \
+            or any(_tainted(k.value, tainted) for k in expr.keywords)
+    if isinstance(expr, ast.Attribute):
+        if expr.attr in _SOURCE_ATTRS and _is_request(expr.value):
+            return True
+        return _tainted(expr.value, tainted)
+    if isinstance(expr, ast.Name):
+        return expr.id in tainted
+    return any(_tainted(child, tainted) for child in ast.iter_child_nodes(expr))
+
+
+def _taint(tree):
+    """Flow-insensitive intraprocedural taint from request inputs to dangerous sinks."""
+    findings = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        handler = any(isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute) and d.func.attr.lower() in _VERBS | {"route"}
+                      for d in node.decorator_list)
+        tainted = {a.arg for a in node.args.args + node.args.kwonlyargs} if handler else set()
+        for _ in range(10):
+            before = len(tainted)
+            for sub in ast.walk(node):
+                if isinstance(sub, (ast.Assign, ast.AnnAssign, ast.AugAssign)) and _tainted(sub.value, tainted):
+                    targets = sub.targets if isinstance(sub, ast.Assign) else [sub.target]
+                    for target in targets:
+                        for name in ast.walk(target):
+                            if isinstance(name, ast.Name):
+                                tainted.add(name.id)
+            if len(tainted) == before:
+                break
+        for call in ast.walk(node):
+            if not isinstance(call, ast.Call) or not call.args:
+                continue
+            name, first = _call_name(call), call.args[0]
+            owner = call.func.value.id if isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name) else None
+            kind = None
+            if name in ("execute", "executemany") and _tainted(first, tainted):
+                kind = "sql_injection"
+            elif owner == "os" and name in ("system", "popen") and _tainted(first, tainted):
+                kind = "command_injection"
+            elif owner == "subprocess" and name in _SUBPROCESS and _tainted(first, tainted) and any(
+                    k.arg == "shell" and isinstance(k.value, ast.Constant) and k.value.value is True for k in call.keywords):
+                kind = "command_injection"
+            elif name in ("open", "send_file") and _tainted(first, tainted):
+                kind = "path_traversal"
+            elif isinstance(call.func, ast.Name) and name in ("eval", "exec") and _tainted(first, tainted):
+                kind = "code_injection"
+            if kind:
+                findings.append({"kind": kind, "function": node.name, "line": call.lineno})
+    return findings
+
+
 def _python(data):
     try:
         tree = ast.parse(data)
@@ -155,7 +233,7 @@ def _python(data):
             references.add(node.attr)
     routes, env, issues = _domain(tree)
     return {"state": "SYMBOL_INDEXED", "facts": {"routes": routes[:_LIMIT], "env": env[:_LIMIT], "issues": issues[:_LIMIT],
-                                                 "functions": _functions(tree),
+                                                 "functions": _functions(tree), "taint": _taint(tree)[:_LIMIT],
                                                  "definitions": definitions[:_LIMIT], "imports": imports[:_LIMIT],
                                                  "references": sorted(references)[:20 * _LIMIT],
                                                  "exports": exports[:_LIMIT], "main_guard": main_guard}}

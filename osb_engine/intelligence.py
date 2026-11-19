@@ -34,7 +34,7 @@ def valid_facts(result):
     if not isinstance(facts, dict):
         return False
     known = {"definitions", "imports", "references", "exports", "main_guard", "keys", "tables", "dependencies",
-             "routes", "env", "issues", "functions"}
+             "routes", "env", "issues", "functions", "taint"}
     if set(facts) - known:
         return False
     for d in facts.get("definitions", []):
@@ -48,6 +48,10 @@ def valid_facts(result):
     for r in facts.get("routes", []):
         if not (isinstance(r, dict) and set(r) == {"path", "methods", "function", "line"} and _text(r["path"])
                 and _texts(r["methods"]) and _text(r["function"]) and _count(r["line"])):
+            return False
+    for f in facts.get("taint", []):
+        if not (isinstance(f, dict) and set(f) == {"kind", "function", "line"} and _text(f["function"]) and _count(f["line"])
+                and f["kind"] in ("sql_injection", "command_injection", "path_traversal", "code_injection")):
             return False
     for i in facts.get("issues", []):
         if not (isinstance(i, dict) and set(i) == {"kind", "function", "line"} and _text(i["function"]) and _count(i["line"])
@@ -224,13 +228,14 @@ def build_index(repo, extractor=None):
                 continue
             dead.append({"path": f["path"], "symbol": name, "kind": d["kind"], "line": d["line"],
                          "confidence": "candidate", "note": "no static reference in this repository"})
-    routes, environment, issues = [], {}, []
+    routes, environment, issues, taint = [], {}, [], []
     for f in python:
         facts = f["facts"]
         routes += [{**r, "file": f["path"]} for r in facts.get("routes", [])]
         for name in facts.get("env", []):
             environment.setdefault(name, []).append(f["path"])
         issues += [{"path": f["path"], **i} for i in facts.get("issues", [])]
+        taint += [{"file": f["path"], **x} for x in facts.get("taint", [])]
 
     def is_test(path):
         base = path.rsplit("/", 1)[-1]
@@ -299,6 +304,7 @@ def build_index(repo, extractor=None):
                                      "frontend_analysis": "unsupported: no TypeScript/JavaScript parser available, so UI-to-API links are not analysed"},
             "environment": {k: sorted(set(v)) for k, v in sorted(environment.items())},
             "issues": sorted(issues, key=lambda i: (i["path"], i["line"], i["kind"])),
+            "taint": sorted(taint, key=lambda x: (x["file"], x["line"], x["kind"])),
             "tests": {k: sorted(v) for k, v in sorted(tests.items())}, "untested_sources": untested,
             "summary": {"states": dict(sorted(states.items())), "imports": total,
                         "resolution_rate": round(resolved / total, 4) if total else 1.0},

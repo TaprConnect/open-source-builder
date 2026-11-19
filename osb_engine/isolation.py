@@ -77,7 +77,7 @@ def _command(root, outbox, inputs, argv, env=None):
 _HARD_CAP = 16 * 1024 * 1024
 
 
-def _bounded_run(cmd, timeout, stdin_data=b"", cap=_HARD_CAP, pass_fds=(), on_start=None):
+def _bounded_run(cmd, timeout, stdin_data=b"", cap=_HARD_CAP, pass_fds=(), on_start=None, register=None):
     """Run cmd streaming its output; kill it if stdout or stderr exceeds cap or time runs out.
 
     Returns (code, stdout, stderr) with code -1 on timeout and -2 on output overflow. The
@@ -89,6 +89,8 @@ def _bounded_run(cmd, timeout, stdin_data=b"", cap=_HARD_CAP, pass_fds=(), on_st
     finally:
         if on_start:
             on_start()
+    if register:
+        register(proc)
     overflow = threading.Event()
     buffers = {"out": [], "err": []}
 
@@ -153,13 +155,23 @@ def run_external(root, inputs, argv, stdin_data, timeout, max_requests=256, comm
     req_r, req_w = os.pipe()
     resp_r, resp_w = os.pipe()
     deadline = time.monotonic() + timeout
+    stop = threading.Event()
+    current = {}
+
+    def track(proc):
+        current["proc"] = proc
+        if stop.is_set():
+            proc.kill()
 
     def broker():
         count = 0
         with os.fdopen(req_r, "rb") as requests, os.fdopen(resp_w, "wb", buffering=0) as replies:
             while True:
                 line = requests.readline(8 * 1024 * 1024 + 1)
-                if not line:
+                if not line or stop.is_set():
+                    return
+                if len(line) > 8 * 1024 * 1024:
+                    replies.write(b'{"error": "request too large; broker stopped"}\n')
                     return
                 count += 1
                 try:
@@ -176,7 +188,7 @@ def run_external(root, inputs, argv, stdin_data, timeout, max_requests=256, comm
                     code, out, err = run_isolated(root, command, {}, max(1, min(int(message.get("timeout", 60)),
                                                                               command_timeout, left - 1)),
                                                   {"PYTHONDONTWRITEBYTECODE": "1"}, data, limits=limits,
-                                                  max_output=8 * 1024 * 1024)
+                                                  max_output=8 * 1024 * 1024, register=track)
                     reply = {"code": code, "stdout": base64.b64encode(out).decode("ascii"),
                              "stderr": base64.b64encode(err[-65536:]).decode("ascii")}
                 except Exception as exc:  # reported to the acceptance, never trusted
@@ -195,11 +207,15 @@ def run_external(root, inputs, argv, stdin_data, timeout, max_requests=256, comm
 
     cmd = _command(None, None, inputs, list(argv) + [str(req_w), str(resp_r)], {"PYTHONDONTWRITEBYTECODE": "1"})
     code, out, err = _bounded_run(cmd, timeout, stdin_data, pass_fds=(req_w, resp_r), on_start=started)
-    thread.join(timeout=5)
+    stop.set()
+    proc = current.get("proc")
+    if proc is not None and proc.poll() is None:
+        proc.kill()
+    thread.join()
     return code, out[-_MAX_OUTPUT:], err[-_MAX_OUTPUT:]
 
 
-def run_isolated(root, argv, inputs, timeout, env=None, stdin_data=b"", limits=None, max_output=None):
+def run_isolated(root, argv, inputs, timeout, env=None, stdin_data=b"", limits=None, max_output=None, register=None):
     """Run argv with the checkout read-only and no writable host path; return (code, stdout, stderr)."""
     if not available():
         raise ValueError("isolation unavailable on this host")
@@ -209,7 +225,7 @@ def run_isolated(root, argv, inputs, timeout, env=None, stdin_data=b"", limits=N
         argv = ["prlimit", f"--cpu={int(cpu)}", f"--as={int(memory_mib) * 1024 * 1024}",
                 "--nofile=64", "--nproc=64", "--"] + argv
     code, out, err = _bounded_run(_command(root, None, inputs, argv, env), timeout, stdin_data,
-                                  _HARD_CAP if max_output is None else max_output)
+                                  _HARD_CAP if max_output is None else max_output, register=register)
     if max_output is None:
         out = out[-_MAX_OUTPUT:]
     return code, out, err[-_MAX_OUTPUT:]

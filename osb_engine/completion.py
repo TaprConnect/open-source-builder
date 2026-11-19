@@ -131,8 +131,15 @@ def freeze(store, run_id, task_id, acceptance, external=False):
             raise ValueError("this project requires external acceptance (freeze --external)")
         existing = conn.execute("SELECT mode FROM kernel_acceptance_modes_v1 WHERE project=? AND run_id=? AND task_id=?",
                                 (project, run_id, task_id)).fetchone()
-        if (existing and existing[0] != mode) or (row and not existing and mode != "in_process"):
-            raise ValueError("frozen acceptance mode cannot change")
+        current = existing[0] if existing else ("in_process" if row else None)
+        verified = conn.execute("SELECT 1 FROM kernel_verifications_v1 WHERE project=? AND run_id=? AND task_id=?",
+                                (project, run_id, task_id)).fetchone()
+        upgrade = current == "in_process" and mode == "external" and not verified
+        if current is not None and current != mode and not upgrade:
+            raise ValueError("frozen acceptance mode cannot change (upgrade to external only before verification)")
+        if upgrade:
+            conn.execute("""INSERT INTO kernel_acceptance_modes_v1 VALUES (?, ?, ?, ?)
+                ON CONFLICT(project, run_id, task_id) DO UPDATE SET mode=excluded.mode""", (project, run_id, task_id, mode))
         conn.execute("INSERT OR IGNORE INTO kernel_acceptance_v1 VALUES (?, ?, ?, ?)",
                      (project, run_id, task_id, value))
         conn.execute("INSERT OR IGNORE INTO kernel_acceptance_modes_v1 VALUES (?, ?, ?, ?)",
@@ -144,6 +151,11 @@ def _mode(conn, project, run_id, task_id):
     row = conn.execute("SELECT mode FROM kernel_acceptance_modes_v1 WHERE project=? AND run_id=? AND task_id=?",
                        (project, run_id, task_id)).fetchone()
     return row[0] if row else "in_process"
+
+
+def _require_external(conn, project, run_id, task_id):
+    if flag(conn, project, "require_external_acceptance") and _mode(conn, project, run_id, task_id) != "external":
+        raise ValueError("this project requires external acceptance for verification and completion")
 
 
 def _frozen(conn, project, run_id, task_id):
@@ -164,6 +176,7 @@ def verify(store, run_id, task_id, generation, acceptance, timeout=600):
             raise ValueError("project dispatch paused")
         if _frozen(conn, project, run_id, task_id) != _sha(acceptance):
             raise ValueError("acceptance differs from the frozen contract")
+        _require_external(conn, project, run_id, task_id)
         plan = _live(store, run_id, task_id, generation)
         if integrity(store, conn):
             raise ValueError("out-of-band worktree changes detected")
@@ -214,6 +227,7 @@ def complete(store, run_id, task_id, generation, token):
         if completed(conn, project, run_id, task_id):
             raise ValueError("task already completed")
         frozen = _frozen(conn, project, run_id, task_id)
+        _require_external(conn, project, run_id, task_id)
         if integrity(store, conn):
             raise ValueError("out-of-band worktree changes detected")
         state = state_digest(conn, project, plan["revision"])

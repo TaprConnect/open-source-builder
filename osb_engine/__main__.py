@@ -18,6 +18,7 @@ from .doctor import doctor, text_report
 from .handover import export_plan, import_plan
 from . import plugins as plugins_module
 from .intelligence import build_index, valid_facts
+from .control_framework import evaluate_controls
 from .sandboxed import isolated_map
 from .repository import Repository
 from .store import identity
@@ -204,6 +205,14 @@ def _main(argv):
     index_parser.add_argument('--analysis-cpu', type=int, default=10)
     index_parser.add_argument('--analysis-memory', type=int, default=512)
     index_parser.add_argument('--analysis-budget', type=int, default=1800)
+    controls_parser = sub.add_parser('controls', description='Evaluate the engineering control catalogue against the repository index.')
+    controls_parser.add_argument('repository')
+    controls_parser.add_argument('database')
+    controls_parser.add_argument('--catalogue', default=str(Path(__file__).resolve().parent/'profiles'/'checks.tsv'))
+    controls_parser.add_argument('--trusted-target', action='store_true')
+    controls_parser.add_argument('--analysis-cpu', type=int, default=10)
+    controls_parser.add_argument('--analysis-memory', type=int, default=512)
+    controls_parser.add_argument('--analysis-budget', type=int, default=1800)
     cancel_parser = sub.add_parser('cancel', description='Trusted supervisor only. Cancels a task (terminal).')
     for field in ('repository', 'database', 'run_id', 'task_id'):
         cancel_parser.add_argument(field)
@@ -305,7 +314,7 @@ def _main(argv):
                         raise ValueError('inputs must be NAME=PATH')
                     output = run_worker(store, a.run_id, a.task_id, a.generation, token,
                                         a.outbox, worker_argv, inputs, a.timeout)
-                elif a.command == 'index':
+                elif a.command in ('index', 'controls'):
                     if isolation_available():
                         extractor = isolated_map(repo.root, plugins_module, 'extract', valid_facts, a.analysis_cpu,
                                                  a.analysis_memory, budget_seconds=a.analysis_budget)
@@ -315,6 +324,8 @@ def _main(argv):
                     else:
                         raise ValueError('analysis isolation unavailable; use --trusted-target only for trusted repositories')
                     output = build_index(repo, extractor)
+                    if a.command == 'controls':
+                        output = evaluate_controls(catalogue(a.catalogue), output)
                 elif a.command == 'cancel':
                     output = store.cancel(a.run_id, a.task_id, a.reason)
                 elif a.command == 'export-plan':

@@ -214,5 +214,11 @@
   "platform": "linux",
   "sha256": "d60a1fa8afd9ac8562ef4535647adc02e87a56384e92e6c675fe231eb8e5e7b6",
   "task": "S05-001 (v2 amendment)"
+ },
+ "s05_002": {
+  "frozen_hash_verified": true,
+  "platform": "linux",
+  "sha256": "830f3ee29c6018984b614634270545d657162c9b68c9d0f1b850d94efa3026ac",
+  "task": "S05-002"
  }
 }

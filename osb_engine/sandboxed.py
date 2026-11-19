@@ -77,14 +77,19 @@ def _valid(value):
     return True
 
 
-def isolated_analyser(root, cpu_seconds=10, memory_mib=512, timeout=120, budget_seconds=600, workers=4):
-    """Return analyse(items) -> {key: (status, analysis) or None} for (key, kind, bytes) items."""
+def isolated_map(root, module, function, validator, cpu_seconds=10, memory_mib=512, timeout=120,
+                 budget_seconds=600, workers=4):
+    """Return run(items) -> {key: result or None}: module.function(kind, bytes) applied to each
+    (key, kind, bytes) item in its own isolated child; results must pass validator."""
     if not available():
         raise ValueError("isolation unavailable on this host")
     if not (1 <= cpu_seconds <= 600 and 32 <= memory_mib <= 16384 and 1 <= budget_seconds <= 86400
             and 1 <= workers <= 16):
         raise ValueError("analysis limits out of range")
-    source = Path(analysis.__file__).read_bytes()
+    source = Path(module.__file__).read_bytes()
+    name = module.__name__.rsplit(".", 1)[-1]
+    entry = (_ENTRY.replace(b"import analysis", b"import " + name.encode() + b" as analysis")
+             .replace(b"analysis.analyse(", b"analysis." + function.encode() + b"("))
 
     def run_one(item, deadline):
         remaining = deadline - time.monotonic()
@@ -93,9 +98,9 @@ def isolated_analyser(root, cpu_seconds=10, memory_mib=512, timeout=120, budget_
         key = item[0]
         with tempfile.TemporaryDirectory() as tmp:
             inputs = {}
-            for name, data in (("entry.py", _ENTRY), ("analysis.py", source)):
-                inputs[name] = os.path.join(tmp, name)
-                with open(inputs[name], "wb") as handle:
+            for filename, data in (("entry.py", entry), (name + ".py", source)):
+                inputs[filename] = os.path.join(tmp, filename)
+                with open(inputs[filename], "wb") as handle:
                     handle.write(data)
             payload = json.dumps({"items": [[key, item[1], base64.b64encode(item[2]).decode("ascii")]]}).encode()
             code, out, _ = run_isolated(root, ["python3", "-I", "-B", "/inputs/entry.py"], inputs,
@@ -107,17 +112,23 @@ def isolated_analyser(root, cpu_seconds=10, memory_mib=512, timeout=120, budget_
             document = json.loads(out)
         except ValueError:
             return None
-        if not isinstance(document, dict) or document.get("version") != analysis.VERSION:
-            raise ValueError("isolated analyser version differs from the supervisor's analyser")
+        if not isinstance(document, dict) or document.get("version") != module.VERSION:
+            raise ValueError("isolated child version differs from the supervisor's module")
         results = document.get("results")
-        if not isinstance(results, dict) or set(results) != {key} or not _valid(results[key]):
+        if not isinstance(results, dict) or set(results) != {key} or not validator(results[key]):
             return None
-        return tuple(results[key])
+        value = results[key]
+        return tuple(value) if isinstance(value, list) else value
 
-    def analyse_batch(items):
+    def run_all(items):
         deadline = time.monotonic() + budget_seconds
         with concurrent.futures.ThreadPoolExecutor(workers) as pool:
             futures = {item[0]: pool.submit(run_one, item, deadline) for item in items}
             return {key: future.result() for key, future in futures.items()}
 
-    return analyse_batch
+    return run_all
+
+
+def isolated_analyser(root, cpu_seconds=10, memory_mib=512, timeout=120, budget_seconds=600, workers=4):
+    """Return analyse(items) -> {key: (status, analysis) or None} for (key, kind, bytes) items."""
+    return isolated_map(root, analysis, "analyse", _valid, cpu_seconds, memory_mib, timeout, budget_seconds, workers)

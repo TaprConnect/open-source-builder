@@ -16,6 +16,9 @@ from .mutation import mutate
 from .config import load as load_config, resolve
 from .doctor import doctor, text_report
 from .handover import export_plan, import_plan
+from . import plugins as plugins_module
+from .intelligence import build_index, valid_facts
+from .sandboxed import isolated_map
 from .repository import Repository
 from .store import identity
 from .store import Store
@@ -194,6 +197,13 @@ def _main(argv):
     cache_parser = sub.add_parser('cache-clear', description='Trusted supervisor only. Empties the analysis cache.')
     cache_parser.add_argument('repository')
     cache_parser.add_argument('database')
+    index_parser = sub.add_parser('index', description='Build a repository intelligence index of the pinned revision.')
+    index_parser.add_argument('repository')
+    index_parser.add_argument('database')
+    index_parser.add_argument('--trusted-target', action='store_true')
+    index_parser.add_argument('--analysis-cpu', type=int, default=10)
+    index_parser.add_argument('--analysis-memory', type=int, default=512)
+    index_parser.add_argument('--analysis-budget', type=int, default=1800)
     cancel_parser = sub.add_parser('cancel', description='Trusted supervisor only. Cancels a task (terminal).')
     for field in ('repository', 'database', 'run_id', 'task_id'):
         cancel_parser.add_argument(field)
@@ -295,6 +305,16 @@ def _main(argv):
                         raise ValueError('inputs must be NAME=PATH')
                     output = run_worker(store, a.run_id, a.task_id, a.generation, token,
                                         a.outbox, worker_argv, inputs, a.timeout)
+                elif a.command == 'index':
+                    if isolation_available():
+                        extractor = isolated_map(repo.root, plugins_module, 'extract', valid_facts, a.analysis_cpu,
+                                                 a.analysis_memory, budget_seconds=a.analysis_budget)
+                    elif a.trusted_target or os.environ.get('OSB_TRUSTED_TARGETS') == '1':
+                        extractor = None
+                        print('warning: indexing repository content in-process without isolation (trusted target asserted)', file=sys.stderr)
+                    else:
+                        raise ValueError('analysis isolation unavailable; use --trusted-target only for trusted repositories')
+                    output = build_index(repo, extractor)
                 elif a.command == 'cancel':
                     output = store.cancel(a.run_id, a.task_id, a.reason)
                 elif a.command == 'export-plan':

@@ -7,13 +7,67 @@ permits only schema definition.
 """
 import ast
 import json
+import re
 import sqlite3
 
-VERSION = "1"
+VERSION = "2"
 _LIMIT = 5000
 
 
 _VERBS = {"get", "post", "put", "patch", "delete"}
+_CREDENTIAL_LAST = {"password", "passwd", "pwd", "secret", "token", "apikey", "secretkey"}
+_KEY_PREFIXES = {"api", "secret", "access", "private", "signing", "encryption", "client"}
+_PLACEHOLDERS = ("change", "example", "your", "xxx", "<", "${", "placeholder", "dummy", "redacted", "todo", "replace")
+_LOG_METHODS = {"exception", "error", "warning", "warn", "critical", "fatal", "info", "debug", "log"}
+_BROAD = {"Exception", "BaseException"}
+
+
+def credential_name(name):
+    """True when an identifier names a credential (DB_PASSWORD, apiKey, SECRET_KEY), not a label (password_field)."""
+    parts = [p for p in re.split(r"[^a-z0-9]+", re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name).lower()) if p]
+    if not parts:
+        return False
+    return parts[-1] in _CREDENTIAL_LAST or (parts[-1] == "key" and len(parts) > 1 and parts[-2] in _KEY_PREFIXES)
+
+
+def real_secret(value):
+    """Heuristic: a literal that looks like a real credential. Placeholders, words and phrases are excluded."""
+    v = value.strip()
+    return (len(v) >= 8 and not any(c.isspace() for c in v) and not re.fullmatch(r"[a-z][a-z_]*", v)
+            and not any(p in v.lower() for p in _PLACEHOLDERS))
+
+
+def _credentials(tree):
+    """Credential-named targets bound to literal secrets. Names and lines only: values are never emitted."""
+    found = []
+
+    def check(name, value, line):
+        literal = _const(value)
+        if name and literal is not None and credential_name(name) and real_secret(literal):
+            found.append({"kind": "literal", "name": name, "line": line})
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
+            for target in (node.targets if isinstance(node, ast.Assign) else [node.target]):
+                name = target.id if isinstance(target, ast.Name) else target.attr if isinstance(target, ast.Attribute) else None
+                check(name, node.value, node.lineno)
+        elif isinstance(node, ast.Call):
+            for kw in node.keywords:
+                check(kw.arg, kw.value, getattr(kw, "lineno", node.lineno))
+        elif isinstance(node, ast.Dict):
+            for key, value in zip(node.keys, node.values):
+                if key is not None:
+                    check(_const(key), value, key.lineno)
+    return found[:_LIMIT]
+
+
+def _broad(handler):
+    types = handler.type.elts if isinstance(handler.type, ast.Tuple) else [handler.type]
+    return any(isinstance(t, ast.Name) and t.id in _BROAD for t in types)
+
+
+def _logs_or_raises(handler):
+    return any(isinstance(n, ast.Raise) or (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                                            and n.func.attr in _LOG_METHODS) for n in ast.walk(handler))
 
 
 def _const(node):
@@ -26,7 +80,7 @@ def _is_docstring(statement):
 
 def _domain(tree):
     """Routes, environment-variable reads and per-function implementation issues."""
-    routes, env, issues = [], set(), []
+    routes, env, issues, required = [], set(), [], []
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             for dec in node.decorator_list:
@@ -56,6 +110,8 @@ def _domain(tree):
                         issues.append({"kind": "bare_except", "function": node.name, "line": handler.lineno})
                     elif all(isinstance(s, ast.Pass) for s in handler.body):
                         issues.append({"kind": "swallowed_exception", "function": node.name, "line": handler.lineno})
+                    elif _broad(handler) and not _logs_or_raises(handler):
+                        issues.append({"kind": "unlogged_broad_handler", "function": node.name, "line": handler.lineno})
         elif isinstance(node, ast.Call):
             func = node.func
             if isinstance(func, ast.Name) and func.id in ("path", "re_path") and len(node.args) >= 2 and _const(node.args[0]) is not None:
@@ -67,10 +123,14 @@ def _domain(tree):
                     (func.attr == "getenv" and isinstance(func.value, ast.Name) and func.value.id == "os")
                     or (func.attr == "get" and isinstance(func.value, ast.Attribute) and func.value.attr == "environ")):
                 env.add(_const(node.args[0]))
+                if len(node.args) == 1 and not any(kw.arg == "default" for kw in node.keywords):
+                    required.append({"name": _const(node.args[0]), "line": node.lineno})
         elif isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute) and node.value.attr == "environ" \
                 and _const(node.slice) is not None:
             env.add(_const(node.slice))
-    return routes, sorted(env), issues
+            if isinstance(node.ctx, ast.Load):
+                required.append({"name": _const(node.slice), "line": node.lineno})
+    return routes, sorted(env), issues, sorted(required, key=lambda r: (r["line"], r["name"]))
 
 
 _MUTATORS = {"append", "extend", "update", "add", "insert", "setdefault", "pop", "remove", "clear", "discard"}
@@ -231,8 +291,9 @@ def _python(data):
             references.add(node.id)
         elif isinstance(node, ast.Attribute):
             references.add(node.attr)
-    routes, env, issues = _domain(tree)
+    routes, env, issues, required = _domain(tree)
     return {"state": "SYMBOL_INDEXED", "facts": {"routes": routes[:_LIMIT], "env": env[:_LIMIT], "issues": issues[:_LIMIT],
+                                                 "env_required": required[:_LIMIT], "credentials": _credentials(tree),
                                                  "functions": _functions(tree), "taint": _taint(tree)[:_LIMIT],
                                                  "definitions": definitions[:_LIMIT], "imports": imports[:_LIMIT],
                                                  "references": sorted(references)[:20 * _LIMIT],
@@ -320,8 +381,40 @@ def _sql(data):
         conn.close()
 
 
+_ENV_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _dotenv(data, example=False):
+    """Variable names of a dotenv file; credential names with real values unless it is an example file.
+    Values are never emitted."""
+    try:
+        lines = data.decode("utf-8").splitlines()
+    except UnicodeDecodeError as exc:
+        return {"state": "INDEXED", "error": f"undecodable dotenv file: {exc}"[:300]}
+    keys, credentials = [], []
+    for number, line in enumerate(lines[:20 * _LIMIT], 1):
+        text = line.strip()
+        if text.startswith("export "):
+            text = text[7:].lstrip()
+        if not text or text.startswith("#") or "=" not in text:
+            continue
+        key, value = (part.strip() for part in text.split("=", 1))
+        if not _ENV_KEY.fullmatch(key):
+            continue
+        keys.append(key)
+        if value[:1] in ("'", '"'):
+            value = value[1:value.find(value[0], 1)] if value.find(value[0], 1) > 0 else value[1:]
+        else:
+            value = value.split(" #", 1)[0].strip()
+        if not example and credential_name(key) and real_secret(value):
+            credentials.append({"kind": "dotenv", "name": key, "line": number})
+    facts = {"keys": sorted(set(keys))[:_LIMIT], "credentials": credentials[:_LIMIT]}
+    return {"state": "SYMBOL_INDEXED" if keys else "PARSED", "facts": facts}
+
+
 PLUGINS = {"python": _python, "json": _json, "toml": _toml, "sql": _sql, "pyproject": _pyproject,
-           "requirements": _requirements}
+           "requirements": _requirements, "dotenv": _dotenv, "dotenv_example": lambda data: _dotenv(data, True)}
+_EXAMPLE_SUFFIXES = {"example", "sample", "template", "dist", "defaults"}
 EXTENSIONS = {".py": "python", ".json": "json", ".toml": "toml", ".sql": "sql",
               ".ts": "typescript", ".tsx": "typescript", ".js": "javascript", ".jsx": "javascript", ".mjs": "javascript"}
 
@@ -332,6 +425,8 @@ def language(path):
         return "pyproject"
     if base.startswith("requirements") and base.endswith(".txt"):
         return "requirements"
+    if base == ".env" or base.startswith(".env."):
+        return "dotenv_example" if base.rsplit(".", 1)[-1] in _EXAMPLE_SUFFIXES else "dotenv"
     for suffix, name in EXTENSIONS.items():
         if path.lower().endswith(suffix):
             return name

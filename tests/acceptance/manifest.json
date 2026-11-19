@@ -212,7 +212,7 @@
  "s05_001": {
   "frozen_hash_verified": true,
   "platform": "linux",
-  "sha256": "a6a8f274bb2d9906e8e74ba01b542759d9e66c3654ec8e8d3b9c819ea4b24dc3",
-  "task": "S05-001"
+  "sha256": "d60a1fa8afd9ac8562ef4535647adc02e87a56384e92e6c675fe231eb8e5e7b6",
+  "task": "S05-001 (v2 amendment)"
  }
 }

@@ -16,8 +16,9 @@ assert len(by)==66 and len(res["controls"])==66
 fields={"id","domain","family","applicability","static_evaluator","runtime_evaluator","evidence","required_outcome","severity","remediation","support","status","violations"}
 assert all(fields<=set(c) for c in res["controls"]),[sorted(fields-set(c)) for c in res["controls"]][:1]
 assert all(c["status"]!="pass" for c in res["controls"])
-assert {d for d,c in by.items() if c["support"]=="static"}==SUPPORTED
-assert all(c["status"]=="unsupported" for d,c in by.items() if d not in SUPPORTED)
+STATIC=SUPPORTED|{"Secrets","Configuration","Observability"}
+assert {d for d,c in by.items() if c["support"]=="static"}==STATIC
+assert all(c["status"]=="unsupported" for d,c in by.items() if d not in STATIC)
 for d in SUPPORTED:
     assert by[d]["status"]=="violation" and by[d]["violations"] and all(v.get("file") for v in by[d]["violations"]),(d,by[d])
 clean={"pyproject.toml":'[project]\nname="c"\nversion="1"\ndependencies=["flask"]\n',"svc/__init__.py":"","svc/util.py":"def add(a, b):\n    return a + b\n","tests/test_util.py":"from svc import util\n\ndef test_add():\n    assert util.add(1, 2) == 3\n"}

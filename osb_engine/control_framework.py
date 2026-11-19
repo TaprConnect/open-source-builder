@@ -15,7 +15,8 @@ FAMILIES = {"Identity": "security", "Tenancy": "security", "WebDefences": "secur
             "Canary": "operations", "Infrastructure": "operations", "SupplyChain": "supply-chain", "Build": "build",
             "Quality": "testing", "Architecture": "architecture", "Configuration": "configuration"}
 SEVERITY = {"Identity": "high", "WebDefences": "high", "Persistence": "high", "Backend": "high",
-            "Reliability": "medium", "SupplyChain": "medium", "Quality": "medium", "Architecture": "low"}
+            "Reliability": "medium", "SupplyChain": "medium", "Quality": "medium", "Architecture": "low",
+            "Secrets": "high", "Configuration": "medium", "Observability": "medium"}
 REMEDIATION = {
     "Persistence": "Persist writes through the data layer (or document intentionally ephemeral state) and add an acceptance test that reads the record back after restart.",
     "Identity": "Require authentication and authorisation on write routes and add a denied-access test.",
@@ -25,6 +26,9 @@ REMEDIATION = {
     "Quality": "Add tests that exercise the route or module through its public entry point.",
     "WebDefences": "Use parameterised queries, argument lists without shell, path normalisation within an allowed root, and never evaluate input.",
     "Architecture": "Break the import cycle by extracting shared code or inverting the dependency.",
+    "Secrets": "Remove the credential from source control, rotate it, and load it at runtime from the environment or a secret manager.",
+    "Configuration": "Declare the variable in a committed example dotenv file and validate required settings at startup with a clear error that does not print values.",
+    "Observability": "Log the exception with context (logger.exception) or re-raise it so failures are traceable.",
 }
 
 
@@ -84,9 +88,30 @@ def _architecture(index):
                                           for cycle in index["graph"].get("cycles", [])]
 
 
+def _secrets(index):
+    applicable = any(f["language"] in ("python", "dotenv", "dotenv_example") for f in index["files"])
+    return applicable, [{"file": c["file"], "line": c["line"], "name": c["name"],
+                         "detail": "hard-coded credential literal" if c["kind"] == "literal" else "credential value committed in dotenv file"}
+                        for c in index.get("credentials", [])]
+
+
+def _configuration(index):
+    return bool(index.get("environment")), [
+        {"file": r["file"], "line": r["line"], "name": r["name"],
+         "detail": "environment variable read without default and not declared in any committed dotenv file"}
+        for r in index.get("configuration", {}).get("required_without_default", []) if not r["declared"]]
+
+
+def _observability(index):
+    return bool(_python_sources(index)), [{"file": i["path"], "line": i["line"], "function": i["function"],
+                                           "detail": "broad exception handler neither logs nor re-raises"}
+                                          for i in index.get("issues", []) if i["kind"] == "unlogged_broad_handler"]
+
+
 EVALUATORS = {"Persistence": _persistence, "Identity": _identity, "Backend": _backend, "Reliability": _reliability,
               "SupplyChain": _supply_chain, "Quality": _quality, "WebDefences": _web_defences,
-              "Architecture": _architecture}
+              "Architecture": _architecture, "Secrets": _secrets, "Configuration": _configuration,
+              "Observability": _observability}
 
 
 def evaluate_controls(rows, index):

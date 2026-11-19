@@ -34,9 +34,16 @@ def valid_facts(result):
     if not isinstance(facts, dict):
         return False
     known = {"definitions", "imports", "references", "exports", "main_guard", "keys", "tables", "dependencies",
-             "routes", "env", "issues", "functions", "taint"}
+             "routes", "env", "issues", "functions", "taint", "env_required", "credentials"}
     if set(facts) - known:
         return False
+    for r in facts.get("env_required", []):
+        if not (isinstance(r, dict) and set(r) == {"name", "line"} and _text(r["name"]) and _count(r["line"])):
+            return False
+    for c in facts.get("credentials", []):
+        if not (isinstance(c, dict) and set(c) == {"kind", "name", "line"} and c["kind"] in ("literal", "dotenv")
+                and _text(c["name"]) and _count(c["line"])):
+            return False
     for d in facts.get("definitions", []):
         if not (isinstance(d, dict) and set(d) == {"name", "kind", "line"} and _text(d["name"])
                 and d["kind"] in ("function", "class") and _count(d["line"])):
@@ -55,7 +62,8 @@ def valid_facts(result):
             return False
     for i in facts.get("issues", []):
         if not (isinstance(i, dict) and set(i) == {"kind", "function", "line"} and _text(i["function"]) and _count(i["line"])
-                and i["kind"] in ("placeholder", "not_implemented", "swallowed_exception", "bare_except")):
+                and i["kind"] in ("placeholder", "not_implemented", "swallowed_exception", "bare_except",
+                                  "unlogged_broad_handler")):
             return False
     functions = facts.get("functions", {})
     if not isinstance(functions, dict) or len(functions) > _ITEMS_MAX:
@@ -236,6 +244,13 @@ def build_index(repo, extractor=None):
             environment.setdefault(name, []).append(f["path"])
         issues += [{"path": f["path"], **i} for i in facts.get("issues", [])]
         taint += [{"file": f["path"], **x} for x in facts.get("taint", [])]
+    credentials, required, declared_env = [], [], set()
+    for f in files:
+        facts = f.get("facts", {})
+        credentials += [{"file": f["path"], **c} for c in facts.get("credentials", [])]
+        required += [{"file": f["path"], **r} for r in facts.get("env_required", [])]
+        if f["language"] in ("dotenv", "dotenv_example"):
+            declared_env.update(facts.get("keys", []))
 
     def is_test(path):
         base = path.rsplit("/", 1)[-1]
@@ -305,6 +320,10 @@ def build_index(repo, extractor=None):
             "environment": {k: sorted(set(v)) for k, v in sorted(environment.items())},
             "issues": sorted(issues, key=lambda i: (i["path"], i["line"], i["kind"])),
             "taint": sorted(taint, key=lambda x: (x["file"], x["line"], x["kind"])),
+            "credentials": sorted(credentials, key=lambda c: (c["file"], c["line"], c["name"])),
+            "configuration": {"declared": sorted(declared_env),
+                              "required_without_default": sorted(({**r, "declared": r["name"] in declared_env} for r in required),
+                                                                 key=lambda r: (r["file"], r["line"], r["name"]))},
             "tests": {k: sorted(v) for k, v in sorted(tests.items())}, "untested_sources": untested,
             "summary": {"states": dict(sorted(states.items())), "imports": total,
                         "resolution_rate": round(resolved / total, 4) if total else 1.0},

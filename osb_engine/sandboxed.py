@@ -29,30 +29,51 @@ sys.stdout.write(json.dumps({"version": analysis.VERSION, "results": results}))
 _MAX_RESULT = 8 * 1024 * 1024
 _MAX_ITEMS = 100000
 _STATUSES = ("analysed", "parse_blocked")
-_LISTS = ("symbols", "imports", "calls", "findings")
-_FINDING = {"rule": str, "line": int, "state": str, "explanation": str}
+_MAX_TEXT = 4096
+_TEXT, _OPTIONAL_TEXT, _COUNT = "text", "optional text", "count"
+_SCHEMAS = {
+    "symbols": {"name": _TEXT, "kind": _TEXT, "line": _COUNT, "end": _COUNT},
+    "imports": {"module": _TEXT, "name": _OPTIONAL_TEXT, "alias": _OPTIONAL_TEXT, "level": _COUNT, "line": _COUNT},
+    "calls": {"caller": _TEXT, "target": _TEXT, "line": _COUNT, "resolution": ("unresolved",)},
+    "findings": {"rule": _TEXT, "line": _COUNT, "state": ("candidate",), "explanation": _TEXT},
+}
+
+
+def _field(value, rule):
+    if rule == _COUNT:
+        return type(value) is int and 0 <= value <= 10 ** 9
+    if rule == _OPTIONAL_TEXT and value is None:
+        return True
+    if rule in (_TEXT, _OPTIONAL_TEXT):
+        return isinstance(value, str) and len(value) <= _MAX_TEXT
+    return value in rule
+
+
+def _texts(values):
+    return (isinstance(values, list) and len(values) <= _MAX_ITEMS
+            and all(isinstance(v, str) and len(v) <= _MAX_TEXT for v in values))
 
 
 def _valid(value):
-    """Deep schema check of one analysis result produced by an untrusted child."""
+    """Element-level schema check of one analysis result produced by an untrusted child."""
     if not (isinstance(value, list) and len(value) == 2 and value[0] in _STATUSES):
         return False
     body = value[1]
-    if not isinstance(body, dict) or set(body) != set(_LISTS) | {"facts"}:
+    if not isinstance(body, dict) or set(body) != set(_SCHEMAS) | {"facts"}:
         return False
-    if not isinstance(body["facts"], dict) or len(body["facts"]) > _MAX_ITEMS:
+    facts = body["facts"]
+    if not (facts == {} or isinstance(facts, dict) and set(facts) == {"scripts", "dependencies"}
+            and _texts(facts["scripts"]) and _texts(facts["dependencies"])):
         return False
-    for name in _LISTS:
+    for name, schema in _SCHEMAS.items():
         items = body[name]
         if not isinstance(items, list) or len(items) > _MAX_ITEMS:
             return False
-        if name != "findings" and not all(isinstance(i, (dict, str, list)) for i in items):
-            return False
-    for finding in body["findings"]:
-        if not isinstance(finding, dict) or set(finding) != set(_FINDING):
-            return False
-        if any(type(finding[k]) is not t for k, t in _FINDING.items()) or finding["state"] != "candidate":
-            return False
+        for item in items:
+            if not isinstance(item, dict) or set(item) != set(schema):
+                return False
+            if not all(_field(item[key], rule) for key, rule in schema.items()):
+                return False
     return True
 
 

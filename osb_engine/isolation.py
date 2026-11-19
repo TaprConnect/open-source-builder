@@ -63,28 +63,32 @@ def _command(root, outbox, inputs, argv, env=None):
         elif host.is_dir():
             cmd += ["--ro-bind", str(host), "/" + name]
     cmd += ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
-            "--ro-bind", str(root), "/work"]
+            ] + ([] if root is None else ["--ro-bind", str(root), "/work"])
     if outbox is not None:
         cmd += ["--bind", str(outbox), "/outbox"]
     for name, path in sorted(inputs.items()):
         cmd += ["--ro-bind", str(path), "/inputs/" + name]
     for key, value in sorted((env or {}).items()):
         cmd += ["--setenv", key, value]
-    return cmd + ["--chdir", "/work", "--setenv", "HOME", "/tmp", "--setenv", "PATH",
+    return cmd + ["--chdir", "/tmp" if root is None else "/work", "--setenv", "HOME", "/tmp", "--setenv", "PATH",
                   "/usr/bin:/bin", "--", *argv]
 
 
 _HARD_CAP = 16 * 1024 * 1024
 
 
-def _bounded_run(cmd, timeout, stdin_data=b"", cap=_HARD_CAP):
+def _bounded_run(cmd, timeout, stdin_data=b"", cap=_HARD_CAP, pass_fds=(), on_start=None):
     """Run cmd streaming its output; kill it if stdout or stderr exceeds cap or time runs out.
 
     Returns (code, stdout, stderr) with code -1 on timeout and -2 on output overflow. The
     supervisor never buffers more than cap + one read per stream."""
     import threading
-    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            env={"PATH": "/usr/bin:/bin"}, start_new_session=True)
+    try:
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                env={"PATH": "/usr/bin:/bin"}, start_new_session=True, pass_fds=pass_fds)
+    finally:
+        if on_start:
+            on_start()
     overflow = threading.Event()
     buffers = {"out": [], "err": []}
 
@@ -133,6 +137,66 @@ def _bounded_run(cmd, timeout, stdin_data=b"", cap=_HARD_CAP):
     if timed_out:
         return -1, b"", b"timeout"
     return proc.returncode, out, err
+
+
+def run_external(root, inputs, argv, stdin_data, timeout, max_requests=256, command_timeout=300,
+                 limits=(120, 2048)):
+    """Run a trusted acceptance with NO checkout access; it reaches repository code only by
+    asking this broker to run commands, each in a separate isolated sandbox (own PID
+    namespace, checkout read-only). Command results return to the acceptance as data."""
+    import base64
+    import json
+    import threading
+    import time
+    if not available():
+        raise ValueError("isolation unavailable on this host")
+    req_r, req_w = os.pipe()
+    resp_r, resp_w = os.pipe()
+    deadline = time.monotonic() + timeout
+
+    def broker():
+        count = 0
+        with os.fdopen(req_r, "rb") as requests, os.fdopen(resp_w, "wb", buffering=0) as replies:
+            while True:
+                line = requests.readline(8 * 1024 * 1024 + 1)
+                if not line:
+                    return
+                count += 1
+                try:
+                    if count > max_requests:
+                        raise ValueError("broker request limit reached")
+                    left = deadline - time.monotonic()
+                    if left <= 1 or len(line) > 8 * 1024 * 1024:
+                        raise ValueError("broker time or size limit reached")
+                    message = json.loads(line)
+                    command = [str(a) for a in message["argv"]]
+                    if not command:
+                        raise ValueError("empty command")
+                    data = base64.b64decode(message.get("stdin", ""))
+                    code, out, err = run_isolated(root, command, {}, max(1, min(int(message.get("timeout", 60)),
+                                                                              command_timeout, left - 1)),
+                                                  {"PYTHONDONTWRITEBYTECODE": "1"}, data, limits=limits,
+                                                  max_output=8 * 1024 * 1024)
+                    reply = {"code": code, "stdout": base64.b64encode(out).decode("ascii"),
+                             "stderr": base64.b64encode(err[-65536:]).decode("ascii")}
+                except Exception as exc:  # reported to the acceptance, never trusted
+                    reply = {"error": str(exc)[:200]}
+                try:
+                    replies.write(json.dumps(reply).encode() + b"\n")
+                except OSError:
+                    return
+
+    thread = threading.Thread(target=broker, daemon=True)
+    thread.start()
+
+    def started():
+        os.close(req_w)
+        os.close(resp_r)
+
+    cmd = _command(None, None, inputs, list(argv) + [str(req_w), str(resp_r)], {"PYTHONDONTWRITEBYTECODE": "1"})
+    code, out, err = _bounded_run(cmd, timeout, stdin_data, pass_fds=(req_w, resp_r), on_start=started)
+    thread.join(timeout=5)
+    return code, out[-_MAX_OUTPUT:], err[-_MAX_OUTPUT:]
 
 
 def run_isolated(root, argv, inputs, timeout, env=None, stdin_data=b"", limits=None, max_output=None):

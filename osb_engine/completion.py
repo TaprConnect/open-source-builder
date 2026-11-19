@@ -15,15 +15,50 @@ import tempfile
 import time
 
 from .kernel import begin_journal, commit_journal, end_journal
+from .kernel import flag
 from .kernel import (_live, _paused, consume, _project, _reason, _schema, completed, digest,
                      integrity)
-from .isolation import run_isolated
+from .isolation import run_external, run_isolated
 from .mutation import _apply
 
 # Kernel-owned wrapper: the sentinel is printed only if the acceptance returns normally,
 # so repository code that exits the interpreter early cannot produce a pass. The nonce
 # arrives on stdin, which is closed before the acceptance runs: it never appears in the
 # environment, argv or any /proc file of the sandbox.
+# External mode (S02-017): this runner and the acceptance share a sandbox with NO checkout;
+# repository code runs only in separate broker sandboxes, so it can never read this process.
+_EXTERNAL_RUNNER = b"""import os, runpy, sys
+request_fd, reply_fd = int(sys.argv[1]), int(sys.argv[2])
+nonce = sys.stdin.readline().strip()
+sys.stdin.close()
+os.open("/dev/null", os.O_RDONLY)
+sys.path.insert(0, "/inputs")
+import osb_accept
+osb_accept._connect(request_fd, reply_fd)
+sys.argv = ["/inputs/acceptance.py"]
+runpy.run_path("/inputs/acceptance.py", run_name="__main__")
+sys.stdout.flush()
+os.write(1, ("\\nOSB-VERIFY-PASS " + nonce + "\\n").encode())
+"""
+_ACCEPT_API = b"""import base64, json, os
+_requests = _replies = None
+
+
+def _connect(request_fd, reply_fd):
+    global _requests, _replies
+    _requests = os.fdopen(request_fd, "wb", buffering=0)
+    _replies = os.fdopen(reply_fd, "rb")
+
+
+def run(argv, stdin=b"", timeout=60):
+    \"\"\"Run argv against the read-only checkout in a separate sandbox; returns (code, stdout, stderr).\"\"\"
+    message = {"argv": [str(a) for a in argv], "stdin": base64.b64encode(stdin).decode("ascii"), "timeout": timeout}
+    _requests.write(json.dumps(message).encode() + b"\\n")
+    reply = json.loads(_replies.readline())
+    if "error" in reply:
+        return -3, b"", reply["error"].encode()
+    return reply["code"], base64.b64decode(reply["stdout"]), base64.b64decode(reply["stderr"])
+"""
 _RUNNER = b"""import os, runpy, sys
 nonce = sys.stdin.readline().strip()
 sys.stdin.close()
@@ -78,8 +113,8 @@ def depend(store, run_id, task_id, requires):
     return {"run_id": run_id, "task_id": task_id, "requires": requires}
 
 
-def freeze(store, run_id, task_id, acceptance):
-    """Supervisor freezes the acceptance script digest for a task. It can never change."""
+def freeze(store, run_id, task_id, acceptance, external=False):
+    """Supervisor freezes the acceptance script digest and assurance mode for a task. Neither can change."""
     if type(acceptance) is not bytes or not acceptance or len(acceptance) > 1024 * 1024:
         raise ValueError("frozen acceptance script required")
     conn, project, value = store.conn, _project(store), _sha(acceptance)
@@ -91,9 +126,24 @@ def freeze(store, run_id, task_id, acceptance):
                            (project, run_id, task_id)).fetchone()
         if row and row[0] != value:
             raise ValueError("frozen acceptance cannot change")
+        mode = "external" if external else "in_process"
+        if mode != "external" and flag(conn, project, "require_external_acceptance"):
+            raise ValueError("this project requires external acceptance (freeze --external)")
+        existing = conn.execute("SELECT mode FROM kernel_acceptance_modes_v1 WHERE project=? AND run_id=? AND task_id=?",
+                                (project, run_id, task_id)).fetchone()
+        if (existing and existing[0] != mode) or (row and not existing and mode != "in_process"):
+            raise ValueError("frozen acceptance mode cannot change")
         conn.execute("INSERT OR IGNORE INTO kernel_acceptance_v1 VALUES (?, ?, ?, ?)",
                      (project, run_id, task_id, value))
-    return {"run_id": run_id, "task_id": task_id, "acceptance_sha256": value}
+        conn.execute("INSERT OR IGNORE INTO kernel_acceptance_modes_v1 VALUES (?, ?, ?, ?)",
+                     (project, run_id, task_id, mode))
+    return {"run_id": run_id, "task_id": task_id, "acceptance_sha256": value, "assurance": mode}
+
+
+def _mode(conn, project, run_id, task_id):
+    row = conn.execute("SELECT mode FROM kernel_acceptance_modes_v1 WHERE project=? AND run_id=? AND task_id=?",
+                       (project, run_id, task_id)).fetchone()
+    return row[0] if row else "in_process"
 
 
 def _frozen(conn, project, run_id, task_id):
@@ -122,13 +172,19 @@ def verify(store, run_id, task_id, generation, acceptance, timeout=600):
         nonce = secrets.token_hex(16)
         with tempfile.TemporaryDirectory() as tmp:
             inputs = {}
-            for name, data in (("acceptance.py", acceptance), ("runner.py", _RUNNER)):
+            mode = _mode(conn, project, run_id, task_id)
+            files = (("acceptance.py", acceptance), ("runner.py", _EXTERNAL_RUNNER), ("osb_accept.py", _ACCEPT_API)) \
+                if mode == "external" else (("acceptance.py", acceptance), ("runner.py", _RUNNER))
+            for name, data in files:
                 inputs[name] = os.path.join(tmp, name)
                 with open(inputs[name], "wb") as handle:
                     handle.write(data)
-            code, out, err = run_isolated(repo.root, ["python3", "-I", "-B", "/inputs/runner.py"], inputs,
-                                          timeout, {"PYTHONDONTWRITEBYTECODE": "1"},
-                                          (nonce + "\n").encode())
+            argv = ["python3", "-I", "-B", "/inputs/runner.py"]
+            if mode == "external":
+                code, out, err = run_external(repo.root, inputs, argv, (nonce + "\n").encode(), timeout)
+            else:
+                code, out, err = run_isolated(repo.root, argv, inputs, timeout, {"PYTHONDONTWRITEBYTECODE": "1"},
+                                              (nonce + "\n").encode())
         lines = out.decode("utf-8", "replace").strip().splitlines()
         sentinel = bool(lines) and lines[-1] == "OSB-VERIFY-PASS " + nonce
         output = out + b"\0" + err
@@ -141,7 +197,8 @@ def verify(store, run_id, task_id, generation, acceptance, timeout=600):
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (project, run_id, task_id, generation, plan["revision"], _sha(acceptance), before,
               code, int(passed), _sha(output), time.time_ns())).lastrowid
-    return {"verification": seq, "passed": passed, "returncode": code,
+        conn.execute("INSERT INTO kernel_verification_modes_v1 VALUES (?, ?)", (seq, mode))
+    return {"verification": seq, "passed": passed, "returncode": code, "assurance": mode,
             "worktree_unchanged": unchanged, "revision": plan["revision"], "state": before}
 
 
@@ -170,7 +227,9 @@ def complete(store, run_id, task_id, generation, token):
         conn.execute("INSERT INTO kernel_completions_v1 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                      (project, run_id, task_id, generation, plan["revision"], row[0], state, time.time_ns()))
         conn.execute("UPDATE kernel_reservations_v1 SET expires_ns=0 WHERE project=?", (project,))
-    return {"completed": True, "run_id": run_id, "task_id": task_id, "generation": generation,
+    mode = conn.execute("SELECT mode FROM kernel_verification_modes_v1 WHERE seq=?", (row[0],)).fetchone()
+    return {"completed": True, "assurance": mode[0] if mode else "in_process",
+            "run_id": run_id, "task_id": task_id, "generation": generation,
             "revision": plan["revision"], "verification": row[0], "state": state}
 
 

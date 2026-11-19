@@ -93,6 +93,8 @@ def main(argv=None):
             c.add_argument('generation', type=int)
         if command in ('freeze', 'verify'):
             c.add_argument('acceptance')
+        if command == 'freeze':
+            c.add_argument('--external', action='store_true', help='acceptance drives repository code only through the isolated broker')
         if command == 'verify':
             c.add_argument('--timeout', type=int, default=600)
         if command == 'release':
@@ -118,6 +120,7 @@ def main(argv=None):
     configure_parser.add_argument('--exclude', action='append', default=[], metavar='DIR/')
     configure_parser.add_argument('--clear-excludes', action='store_true')
     configure_parser.add_argument('--require-approval', choices=('on', 'off'))
+    configure_parser.add_argument('--require-external-acceptance', choices=('on', 'off'))
     approve_parser = sub.add_parser('approve', description='Trusted supervisor only. Approves one exact patch for one lease generation.')
     for field in ('repository', 'database', 'run_id', 'task_id'):
         approve_parser.add_argument(field)
@@ -178,7 +181,7 @@ def main(argv=None):
                     output = mutate(store, a.run_id, a.task_id, a.generation, token,
                                     repo.private_path(a.patch).read_bytes())
                 elif a.command == 'freeze':
-                    output = freeze(store, a.run_id, a.task_id, repo.private_path(a.acceptance).read_bytes())
+                    output = freeze(store, a.run_id, a.task_id, repo.private_path(a.acceptance).read_bytes(), a.external)
                 elif a.command == 'verify':
                     if not 1 <= a.timeout <= 3600:
                         raise ValueError('verification timeout must be 1 to 3600 seconds')
@@ -204,7 +207,8 @@ def main(argv=None):
                     output = set_quota(store, a.run_id, a.task_id, a.kind, a.limit)
                 elif a.command == 'configure':
                     output = configure(store, a.eol, a.exclude, a.clear_excludes,
-                                       None if a.require_approval is None else a.require_approval == 'on')
+                                       None if a.require_approval is None else a.require_approval == 'on',
+                                       None if a.require_external_acceptance is None else a.require_external_acceptance == 'on')
                 elif a.command == 'approve':
                     output = approve(store, a.run_id, a.task_id, a.generation, repo.private_path(a.patch).read_bytes())
                 elif a.command in ('pause', 'resume'):

@@ -34,6 +34,8 @@ def _project(store):
 _EXTRA_TABLES = (
     """CREATE TABLE IF NOT EXISTS kernel_settings_v1 (project TEXT PRIMARY KEY, eol TEXT NOT NULL)""",
     """CREATE TABLE IF NOT EXISTS kernel_journal_commits_v1 (op TEXT PRIMARY KEY)""",
+    """CREATE TABLE IF NOT EXISTS kernel_acceptance_modes_v1 (project TEXT NOT NULL, run_id TEXT NOT NULL, task_id TEXT NOT NULL, mode TEXT NOT NULL, PRIMARY KEY(project, run_id, task_id))""",
+    """CREATE TABLE IF NOT EXISTS kernel_verification_modes_v1 (seq INTEGER PRIMARY KEY, mode TEXT NOT NULL)""",
     """CREATE TABLE IF NOT EXISTS kernel_flags_v1 (project TEXT NOT NULL, name TEXT NOT NULL, value INTEGER NOT NULL, PRIMARY KEY(project, name))""",
     """CREATE TABLE IF NOT EXISTS kernel_approvals_v1 (project TEXT NOT NULL, generation INTEGER NOT NULL, digest TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(project, generation, digest))""",
     """CREATE TABLE IF NOT EXISTS kernel_quotas_v1 (project TEXT NOT NULL, run_id TEXT NOT NULL, task_id TEXT NOT NULL, kind TEXT NOT NULL, quota INTEGER NOT NULL, PRIMARY KEY(project, run_id, task_id, kind))""",
@@ -342,6 +344,11 @@ def recover(store):
             "paths": sorted(journal["paths"])}
 
 
+def flag(conn, project, name):
+    row = conn.execute("SELECT value FROM kernel_flags_v1 WHERE project=? AND name=?", (project, name)).fetchone()
+    return bool(row and row[0])
+
+
 def approval_required(conn, project):
     row = conn.execute("SELECT value FROM kernel_flags_v1 WHERE project=? AND name='require_approval'",
                        (project,)).fetchone()
@@ -439,7 +446,7 @@ def _eol(conn, project):
     return row[0] if row else "none"
 
 
-def configure(store, eol=None, exclude=(), clear_excludes=False, require_approval=None):
+def configure(store, eol=None, exclude=(), clear_excludes=False, require_approval=None, require_external=None):
     """Supervisor declares line-ending policy and untracked directories that are not evidence."""
     if eol is not None and eol not in _EOL:
         raise ValueError("eol policy must be none or crlf")
@@ -461,9 +468,14 @@ def configure(store, eol=None, exclude=(), clear_excludes=False, require_approva
         if require_approval is not None:
             conn.execute("""INSERT INTO kernel_flags_v1 VALUES (?, 'require_approval', ?)
                 ON CONFLICT(project, name) DO UPDATE SET value=excluded.value""", (project, int(bool(require_approval))))
+        if require_external is not None:
+            conn.execute("""INSERT INTO kernel_flags_v1 VALUES (?, 'require_external_acceptance', ?)
+                ON CONFLICT(project, name) DO UPDATE SET value=excluded.value""", (project, int(bool(require_external))))
         current = policy(conn, project)
         required = approval_required(conn, project)
-    return {"eol": current[0], "exclude": list(current[1]), "require_approval": required}
+        external = flag(conn, project, "require_external_acceptance")
+    return {"eol": current[0], "exclude": list(current[1]), "require_approval": required,
+            "require_external_acceptance": external}
 
 
 def integrity(store, conn):

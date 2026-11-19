@@ -20,6 +20,7 @@ _KEY_PREFIXES = {"api", "secret", "access", "private", "signing", "encryption", 
 _PLACEHOLDERS = ("change", "example", "your", "xxx", "<", "${", "placeholder", "dummy", "redacted", "todo", "replace")
 _LOG_METHODS = {"exception", "error", "warning", "warn", "critical", "fatal", "info", "debug", "log"}
 _BROAD = {"Exception", "BaseException"}
+_DECLARATIVE = {"group", "callback", "abstractmethod", "abstractproperty", "overload"}
 
 
 def credential_name(name):
@@ -48,7 +49,8 @@ def _credentials(tree):
     for node in ast.walk(tree):
         if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
             for target in (node.targets if isinstance(node, ast.Assign) else [node.target]):
-                name = target.id if isinstance(target, ast.Name) else target.attr if isinstance(target, ast.Attribute) else None
+                name = target.id if isinstance(target, ast.Name) else target.attr if isinstance(target, ast.Attribute) \
+                    else _const(target.slice) if isinstance(target, ast.Subscript) else None
                 check(name, node.value, node.lineno)
         elif isinstance(node, ast.Call):
             for kw in node.keywords:
@@ -97,7 +99,12 @@ def _domain(tree):
                         continue
                     routes.append({"path": _const(dec.args[0]), "methods": sorted(methods), "function": node.name, "line": dec.lineno})
             body = [s for s in node.body if not _is_docstring(s)] if node.body and _is_docstring(node.body[0]) else node.body
-            if not body or all(isinstance(s, ast.Pass) or (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant)
+            declarative = {(d.func if isinstance(d, ast.Call) else d) for d in node.decorator_list}
+            declarative = {d.id if isinstance(d, ast.Name) else d.attr if isinstance(d, ast.Attribute) else None
+                           for d in declarative} & _DECLARATIVE
+            if declarative:
+                pass  # empty body is the idiom: click/typer groups and callbacks, abstract or overload declarations
+            elif not body or all(isinstance(s, ast.Pass) or (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant)
                                                           and s.value.value is Ellipsis) for s in body):
                 issues.append({"kind": "placeholder", "function": node.name, "line": node.lineno})
             elif len(body) == 1 and isinstance(body[0], ast.Raise) and body[0].exc is not None:
@@ -134,22 +141,50 @@ def _domain(tree):
 
 
 _MUTATORS = {"append", "extend", "update", "add", "insert", "setdefault", "pop", "remove", "clear", "discard"}
+_CONTAINER_FACTORIES = {"set", "list", "dict", "deque", "defaultdict", "OrderedDict", "Counter"}
+
+
+def _container(value):
+    """A literal in-memory container: [], {}, set(), dict(), deque() ..."""
+    if isinstance(value, (ast.List, ast.Dict, ast.Set, ast.ListComp, ast.DictComp, ast.SetComp)):
+        return True
+    return isinstance(value, ast.Call) and _call_name(value) in _CONTAINER_FACTORIES
+
+
+def _constant_mapping(value):
+    """A dict/set/tuple/list literal whose keys and values are all constants (a whitelist)."""
+    if isinstance(value, ast.Dict):
+        return all(isinstance(n, ast.Constant) for n in value.keys + value.values if n is not None) and None not in value.keys
+    if isinstance(value, (ast.Set, ast.Tuple, ast.List)):
+        return all(isinstance(n, ast.Constant) for n in value.elts)
+    return False
 
 
 def _functions(tree):
     """Per top-level function: names it calls and module-level names it mutates."""
-    module_names = set()
+    module_names, module_containers = set(), set()
     for node in tree.body:
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-            module_names.update(t.id for t in targets if isinstance(t, ast.Name))
+            names = {t.id for t in targets if isinstance(t, ast.Name)}
+            module_names.update(names)
+            if _container(node.value):
+                module_containers.update(names)
     out = {}
     for node in tree.body[:_LIMIT]:
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         calls, mutates = set(), set()
         declared_global = {n for g in ast.walk(node) if isinstance(g, ast.Global) for n in g.names}
-        for default in node.args.defaults + [d for d in node.args.kw_defaults if d is not None]:
+        local_containers = {t.id for s in ast.walk(node) if isinstance(s, ast.Assign) and _container(s.value)
+                            for t in s.targets if isinstance(t, ast.Name)}
+        injected = list(node.args.defaults) + [d for d in node.args.kw_defaults if d is not None]
+        for dec in node.decorator_list:  # route-level dependencies=[Depends(x)] (FastAPI)
+            if isinstance(dec, ast.Call):
+                for kw in dec.keywords:
+                    if kw.arg == "dependencies" and isinstance(kw.value, (ast.List, ast.Tuple)):
+                        injected += kw.value.elts
+        for default in injected:
             if isinstance(default, ast.Call) and isinstance(default.func, (ast.Name, ast.Attribute)) and default.args:
                 wrapper = default.func.id if isinstance(default.func, ast.Name) else default.func.attr
                 target = default.args[0]
@@ -165,9 +200,15 @@ def _functions(tree):
                 if isinstance(f, ast.Name):
                     calls.add(f.id)
                 elif isinstance(f, ast.Attribute):
-                    calls.add(f.attr)
-                    if f.attr in _MUTATORS and isinstance(f.value, ast.Name) and f.value.id in module_names:
-                        mutates.add(f.value.id)
+                    receiver = f.value.id if isinstance(f.value, ast.Name) else None
+                    if f.attr in _MUTATORS and receiver in module_containers:
+                        mutates.add(receiver)  # in-memory state change, not a persistence call
+                    elif f.attr in _MUTATORS and receiver in local_containers:
+                        pass  # local scratch container
+                    else:
+                        calls.add(f.attr)
+                        if f.attr in _MUTATORS and receiver in module_names:
+                            mutates.add(receiver)
             elif isinstance(sub, (ast.Assign, ast.AugAssign)):
                 for target in (sub.targets if isinstance(sub, ast.Assign) else [sub.target]):
                     if isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name) and target.value.id in module_names:
@@ -200,31 +241,39 @@ def _is_request(expr):
     return (isinstance(expr, ast.Name) and expr.id == "request") or (isinstance(expr, ast.Attribute) and expr.attr == "request")
 
 
-def _tainted(expr, tainted):
+def _tainted(expr, tainted, safe=frozenset()):
+    """safe: module-level constant mappings; looking a value up in one yields a constant (whitelist)."""
     if expr is None:
+        return False
+    if isinstance(expr, ast.Subscript) and isinstance(expr.value, ast.Name) and expr.value.id in safe:
         return False
     if isinstance(expr, ast.Call):
         name = _call_name(expr)
         if name in _SANITISERS:
             return False
+        if name == "get" and isinstance(expr.func, ast.Attribute) and isinstance(expr.func.value, ast.Name) \
+                and expr.func.value.id in safe and not any(_tainted(a, tainted, safe) for a in expr.args[1:]):
+            return False
         if name == "get_json" and isinstance(expr.func, ast.Attribute) and _is_request(expr.func.value):
             return True
         if name == "input" and isinstance(expr.func, ast.Name):
             return True
-        return _tainted(expr.func, tainted) or any(_tainted(a, tainted) for a in expr.args) \
-            or any(_tainted(k.value, tainted) for k in expr.keywords)
+        return _tainted(expr.func, tainted, safe) or any(_tainted(a, tainted, safe) for a in expr.args) \
+            or any(_tainted(k.value, tainted, safe) for k in expr.keywords)
     if isinstance(expr, ast.Attribute):
         if expr.attr in _SOURCE_ATTRS and _is_request(expr.value):
             return True
-        return _tainted(expr.value, tainted)
+        return _tainted(expr.value, tainted, safe)
     if isinstance(expr, ast.Name):
         return expr.id in tainted
-    return any(_tainted(child, tainted) for child in ast.iter_child_nodes(expr))
+    return any(_tainted(child, tainted, safe) for child in ast.iter_child_nodes(expr))
 
 
 def _taint(tree):
     """Flow-insensitive intraprocedural taint from request inputs to dangerous sinks."""
     findings = []
+    safe = {t.id for n in tree.body if isinstance(n, ast.Assign) and _constant_mapping(n.value)
+            for t in n.targets if isinstance(t, ast.Name)}
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
@@ -234,7 +283,7 @@ def _taint(tree):
         for _ in range(10):
             before = len(tainted)
             for sub in ast.walk(node):
-                if isinstance(sub, (ast.Assign, ast.AnnAssign, ast.AugAssign)) and _tainted(sub.value, tainted):
+                if isinstance(sub, (ast.Assign, ast.AnnAssign, ast.AugAssign)) and _tainted(sub.value, tainted, safe):
                     targets = sub.targets if isinstance(sub, ast.Assign) else [sub.target]
                     for target in targets:
                         for name in ast.walk(target):
@@ -248,16 +297,16 @@ def _taint(tree):
             name, first = _call_name(call), call.args[0]
             owner = call.func.value.id if isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name) else None
             kind = None
-            if name in ("execute", "executemany") and _tainted(first, tainted):
+            if name in ("execute", "executemany") and _tainted(first, tainted, safe):
                 kind = "sql_injection"
-            elif owner == "os" and name in ("system", "popen") and _tainted(first, tainted):
+            elif owner == "os" and name in ("system", "popen") and _tainted(first, tainted, safe):
                 kind = "command_injection"
-            elif owner == "subprocess" and name in _SUBPROCESS and _tainted(first, tainted) and any(
+            elif owner == "subprocess" and name in _SUBPROCESS and _tainted(first, tainted, safe) and any(
                     k.arg == "shell" and isinstance(k.value, ast.Constant) and k.value.value is True for k in call.keywords):
                 kind = "command_injection"
-            elif name in ("open", "send_file") and _tainted(first, tainted):
+            elif name in ("open", "send_file") and _tainted(first, tainted, safe):
                 kind = "path_traversal"
-            elif isinstance(call.func, ast.Name) and name in ("eval", "exec") and _tainted(first, tainted):
+            elif isinstance(call.func, ast.Name) and name in ("eval", "exec") and _tainted(first, tainted, safe):
                 kind = "code_injection"
             if kind:
                 findings.append({"kind": kind, "function": node.name, "line": call.lineno})

@@ -42,8 +42,9 @@ def _python_sources(index):
 
 def _persistence(index):
     write = _routes(index, True)
-    hits = [{"file": c["file"], "route": f"{'/'.join(c['methods'])} {c['path']}", "detail": flag}
-            for c in write for flag in c["flags"] if flag in ("no_persistence", "in_memory_persistence")]
+    hits = [{"file": c["file"], "route": f"{'/'.join(c['methods'])} {c['path']}",
+             "detail": "unimplemented handler persists nothing" if flag == "unimplemented" else flag}
+            for c in write for flag in c["flags"] if flag in ("no_persistence", "in_memory_persistence", "unimplemented")]
     return bool(write), hits
 
 

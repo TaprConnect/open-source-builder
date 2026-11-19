@@ -83,7 +83,13 @@ def valid_facts(result):
 # Import names that differ from their distribution names (documented heuristic).
 _IMPORT_TO_DIST = {"yaml": "pyyaml", "PIL": "pillow", "sklearn": "scikit-learn", "cv2": "opencv-python",
                    "bs4": "beautifulsoup4", "dateutil": "python-dateutil", "jwt": "pyjwt", "google": "protobuf",
-                   "attr": "attrs", "dotenv": "python-dotenv", "magic": "python-magic", "OpenSSL": "pyopenssl"}
+                   "attr": "attrs", "dotenv": "python-dotenv", "magic": "python-magic", "OpenSSL": "pyopenssl",
+                   "jose": "python-jose", "multipart": "python-multipart", "Crypto": "pycryptodome",
+                   "MySQLdb": "mysqlclient", "slugify": "python-slugify", "docx": "python-docx",
+                   "pptx": "python-pptx", "serial": "pyserial", "git": "gitpython", "zmq": "pyzmq",
+                   "nacl": "pynacl", "telegram": "python-telegram-bot", "socketio": "python-socketio",
+                   "engineio": "python-engineio", "pydantic_settings": "pydantic-settings", "jinja2": "jinja2",
+                   "markdown": "markdown", "lxml": "lxml", "dns": "dnspython", "Levenshtein": "python-levenshtein"}
 
 
 def _normalise(name):

@@ -14,6 +14,7 @@ import json
 import os
 import re
 import secrets
+import subprocess
 import tempfile
 import time
 
@@ -31,6 +32,7 @@ def _project(store):
 
 _EXTRA_TABLES = (
     """CREATE TABLE IF NOT EXISTS kernel_settings_v1 (project TEXT PRIMARY KEY, eol TEXT NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS kernel_exclusions_v1 (project TEXT NOT NULL, prefix TEXT NOT NULL, PRIMARY KEY(project, prefix))""",
     """CREATE TABLE IF NOT EXISTS kernel_patches_v1 (
             dispatch INTEGER PRIMARY KEY, project TEXT NOT NULL, run_id TEXT NOT NULL,
             task_id TEXT NOT NULL, generation INTEGER NOT NULL, patch BLOB NOT NULL,
@@ -147,7 +149,7 @@ def digest(root, path):
     return value
 
 
-def worktree_changes(repo, eol="none"):
+def worktree_changes(repo, eol="none", exclude=()):
     """Paths whose worktree content or mode differs from the pinned revision, plus every
     untracked path. Independent of the live index, Git's stat cache and ignore rules."""
     root = str(repo.root)
@@ -155,7 +157,8 @@ def worktree_changes(repo, eol="none"):
         env = {"GIT_INDEX_FILE": os.path.join(tmp, "index")}
         repo.git("read-tree", repo.revision, extra_env=env)
         others = repo.git("ls-files", "-z", "--others", extra_env=env)
-    changed = {os.fsdecode(p).rstrip("/") for p in others.split(b"\0") if p}
+    changed = {path for path in (os.fsdecode(p).rstrip("/") for p in others.split(b"\0") if p)
+               if not any((path + "/").startswith(prefix) for prefix in exclude)}
     regular = []
     for entry in repo.git("ls-tree", "-r", "-z", "--full-tree", repo.revision).split(b"\0"):
         if not entry:
@@ -176,8 +179,7 @@ def worktree_changes(repo, eol="none"):
             if target is None or repo.git("hash-object", "--stdin", data=target).decode().strip() != oid:
                 changed.add(path)
         else:
-            # Gitlinks: nested checkouts are not compared yet, so fail closed.
-            changed.add(path)
+            changed.update(_submodule_changes(full, path, oid, eol))
     if regular:
         # Byte-exact, computed by the kernel: no .gitattributes filter or Git configuration
         # can normalise tampering away. Under the supervisor's crlf policy the only other
@@ -209,6 +211,26 @@ def _matches(data, oid, eol, blob_id):
     return False
 
 
+def _submodule_changes(full, path, oid, eol):
+    """A gitlink is unchanged only if the nested checkout sits at the recorded commit and
+    its own worktree passes the full comparison; anything unverifiable is reported."""
+    from .repository import Repository
+    try:
+        nested = Repository(full)
+        if nested.revision != oid:
+            return {path}
+        return {path + "/" + p for p in worktree_changes(nested, eol)}
+    except (ValueError, OSError, subprocess.SubprocessError):
+        return {path}
+
+
+def policy(conn, project):
+    """(eol, untracked exclusion prefixes) declared by the supervisor."""
+    rows = conn.execute("SELECT prefix FROM kernel_exclusions_v1 WHERE project=? ORDER BY prefix",
+                        (project,)).fetchall()
+    return _eol(conn, project), tuple(r[0] for r in rows)
+
+
 _EOL = ("none", "crlf")
 
 
@@ -217,17 +239,27 @@ def _eol(conn, project):
     return row[0] if row else "none"
 
 
-def configure(store, eol):
-    """Supervisor declares how the checkout's line endings relate to committed blobs."""
-    if eol not in _EOL:
+def configure(store, eol=None, exclude=(), clear_excludes=False):
+    """Supervisor declares line-ending policy and untracked directories that are not evidence."""
+    if eol is not None and eol not in _EOL:
         raise ValueError("eol policy must be none or crlf")
+    for prefix in exclude:
+        if not prefix.endswith("/"):
+            raise ValueError("exclusions are directory prefixes ending in /")
+        _path(prefix)
     conn, project = store.conn, _project(store)
     with conn:
         conn.execute("BEGIN IMMEDIATE")
         _schema(conn)
-        conn.execute("""INSERT INTO kernel_settings_v1 (project, eol) VALUES (?, ?)
-            ON CONFLICT(project) DO UPDATE SET eol=excluded.eol""", (project, eol))
-    return {"eol": eol}
+        if eol is not None:
+            conn.execute("""INSERT INTO kernel_settings_v1 (project, eol) VALUES (?, ?)
+                ON CONFLICT(project) DO UPDATE SET eol=excluded.eol""", (project, eol))
+        if clear_excludes:
+            conn.execute("DELETE FROM kernel_exclusions_v1 WHERE project=?", (project,))
+        conn.executemany("INSERT OR IGNORE INTO kernel_exclusions_v1 VALUES (?, ?)",
+                         [(project, prefix) for prefix in exclude])
+        current = policy(conn, project)
+    return {"eol": current[0], "exclude": list(current[1])}
 
 
 def integrity(store, conn):
@@ -235,7 +267,7 @@ def integrity(store, conn):
     ledger = dict(conn.execute("SELECT path, current FROM kernel_ledger_v1 WHERE project=?",
                                (_project(store),)).fetchall())
     root = str(store.repo.root)
-    problems = sorted(p for p in worktree_changes(store.repo, _eol(conn, _project(store))) if p not in ledger)
+    problems = sorted(p for p in worktree_changes(store.repo, *policy(conn, _project(store))) if p not in ledger)
     problems += sorted(p for p, h in ledger.items() if digest(root, p) != h)
     return problems
 

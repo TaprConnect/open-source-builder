@@ -108,7 +108,9 @@ def main(argv=None):
     configure_parser = sub.add_parser('configure', description='Trusted supervisor only. Declares the checkout line-ending policy.')
     configure_parser.add_argument('repository')
     configure_parser.add_argument('database')
-    configure_parser.add_argument('--eol', choices=('none', 'crlf'), required=True)
+    configure_parser.add_argument('--eol', choices=('none', 'crlf'))
+    configure_parser.add_argument('--exclude', action='append', default=[], metavar='DIR/')
+    configure_parser.add_argument('--clear-excludes', action='store_true')
     for command in ('pause', 'resume'):
         control = sub.add_parser(command, description="Trusted supervisor only.")
         control.add_argument('repository')
@@ -168,7 +170,7 @@ def main(argv=None):
                     output = run_worker(store, a.run_id, a.task_id, a.generation, token,
                                         a.outbox, worker_argv, inputs, a.timeout)
                 elif a.command == 'configure':
-                    output = configure(store, a.eol)
+                    output = configure(store, a.eol, a.exclude, a.clear_excludes)
                 elif a.command in ('pause', 'resume'):
                     output = (pause if a.command == 'pause' else resume)(store, a.reason)
                 elif a.command=='status':

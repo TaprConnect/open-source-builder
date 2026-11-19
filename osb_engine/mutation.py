@@ -15,7 +15,7 @@ import time
 
 from .kernel import begin_journal, commit_journal
 from .kernel import end_journal as _end_journal
-from .kernel import (_live, consume, policy, _path, _paused, _project, _schema, covered, digest,
+from .kernel import (_live, consume, policy, use_approval, _path, _paused, _project, _schema, covered, digest,
                      granted_scope, integrity, worktree_changes)
 
 MAX_PATCH = 8 * 1024 * 1024
@@ -109,6 +109,7 @@ def mutate(store, run_id, task_id, generation, token, patch):
         for kind in ("edit", "delete"):
             if not covered(kind, [p for p, k in changes.items() if k == kind], scope):
                 raise ValueError("patch outside granted scope")
+        use_approval(conn, project, generation, patch)
         if integrity(store, conn):
             raise ValueError("out-of-band worktree changes detected")
         for path in changes:

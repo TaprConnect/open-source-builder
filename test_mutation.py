@@ -148,3 +148,21 @@ class LegacyApplyTests(unittest.TestCase):
                 self.assertEqual(store.conn.execute("SELECT COUNT(*) FROM kernel_dispatches_v1").fetchone()[0], 0)
             finally:
                 store.conn.close()
+
+class ApprovalTests(MutationTests):
+    """S02-014: approvals bind the exact patch, the generation, and a single use."""
+
+    def test_approval_is_exact_and_single_use(self):
+        from osb_engine.kernel import approve, configure
+        configure(self.store, require_approval=True)
+        with self.assertRaisesRegex(ValueError, "not approved"):
+            self.mutate(EDIT)
+        approve(self.store, self.run_id, self.task, self.gen, EDIT)
+        with self.assertRaisesRegex(ValueError, "not approved"):
+            self.mutate(EDIT.replace(b"return 1", b"return 2"))
+        self.mutate(EDIT)
+        restore = EDIT.replace(b"-def a(): pass\n+def a(): return 1", b"-def a(): return 1\n+def a(): pass")
+        approve(self.store, self.run_id, self.task, self.gen, restore)
+        self.mutate(restore)
+        with self.assertRaisesRegex(ValueError, "not approved"):
+            self.mutate(EDIT)

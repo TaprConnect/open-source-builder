@@ -34,6 +34,8 @@ def _project(store):
 _EXTRA_TABLES = (
     """CREATE TABLE IF NOT EXISTS kernel_settings_v1 (project TEXT PRIMARY KEY, eol TEXT NOT NULL)""",
     """CREATE TABLE IF NOT EXISTS kernel_journal_commits_v1 (op TEXT PRIMARY KEY)""",
+    """CREATE TABLE IF NOT EXISTS kernel_flags_v1 (project TEXT NOT NULL, name TEXT NOT NULL, value INTEGER NOT NULL, PRIMARY KEY(project, name))""",
+    """CREATE TABLE IF NOT EXISTS kernel_approvals_v1 (project TEXT NOT NULL, generation INTEGER NOT NULL, digest TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(project, generation, digest))""",
     """CREATE TABLE IF NOT EXISTS kernel_quotas_v1 (project TEXT NOT NULL, run_id TEXT NOT NULL, task_id TEXT NOT NULL, kind TEXT NOT NULL, quota INTEGER NOT NULL, PRIMARY KEY(project, run_id, task_id, kind))""",
     """CREATE TABLE IF NOT EXISTS kernel_usage_v1 (seq INTEGER PRIMARY KEY, project TEXT NOT NULL, run_id TEXT NOT NULL, task_id TEXT NOT NULL, kind TEXT NOT NULL, time_ns INTEGER NOT NULL)""",
     """CREATE TABLE IF NOT EXISTS kernel_exclusions_v1 (project TEXT NOT NULL, prefix TEXT NOT NULL, PRIMARY KEY(project, prefix))""",
@@ -320,6 +322,39 @@ def recover(store):
             "paths": sorted(journal["paths"])}
 
 
+def approval_required(conn, project):
+    row = conn.execute("SELECT value FROM kernel_flags_v1 WHERE project=? AND name='require_approval'",
+                       (project,)).fetchone()
+    return bool(row and row[0])
+
+
+def approve(store, run_id, task_id, generation, patch):
+    """Supervisor approves one exact patch for one live lease generation (single use)."""
+    if type(patch) is not bytes or not patch:
+        raise ValueError("patch required")
+    digest_value = hashlib.sha256(patch).hexdigest()
+    conn, project = store.conn, _project(store)
+    with conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _schema(conn)
+        _live(store, run_id, task_id, generation)
+        conn.execute("INSERT OR IGNORE INTO kernel_approvals_v1 (project, generation, digest) VALUES (?, ?, ?)",
+                     (project, generation, digest_value))
+    return {"run_id": run_id, "task_id": task_id, "generation": generation, "patch_sha256": digest_value}
+
+
+def use_approval(conn, project, generation, patch):
+    """Inside the admitting transaction: consume the approval for this exact patch or refuse."""
+    if not approval_required(conn, project):
+        return
+    digest_value = hashlib.sha256(patch).hexdigest()
+    updated = conn.execute("""UPDATE kernel_approvals_v1 SET used=1
+        WHERE project=? AND generation=? AND digest=? AND used=0""",
+                           (project, generation, digest_value)).rowcount
+    if updated != 1:
+        raise ValueError("patch not approved for this reservation (approvals bind the exact patch once)")
+
+
 QUOTA_KINDS = ("mutate", "verify", "worker")
 
 
@@ -362,7 +397,7 @@ def _eol(conn, project):
     return row[0] if row else "none"
 
 
-def configure(store, eol=None, exclude=(), clear_excludes=False):
+def configure(store, eol=None, exclude=(), clear_excludes=False, require_approval=None):
     """Supervisor declares line-ending policy and untracked directories that are not evidence."""
     if eol is not None and eol not in _EOL:
         raise ValueError("eol policy must be none or crlf")
@@ -381,8 +416,12 @@ def configure(store, eol=None, exclude=(), clear_excludes=False):
             conn.execute("DELETE FROM kernel_exclusions_v1 WHERE project=?", (project,))
         conn.executemany("INSERT OR IGNORE INTO kernel_exclusions_v1 VALUES (?, ?)",
                          [(project, prefix) for prefix in exclude])
+        if require_approval is not None:
+            conn.execute("""INSERT INTO kernel_flags_v1 VALUES (?, 'require_approval', ?)
+                ON CONFLICT(project, name) DO UPDATE SET value=excluded.value""", (project, int(bool(require_approval))))
         current = policy(conn, project)
-    return {"eol": current[0], "exclude": list(current[1])}
+        required = approval_required(conn, project)
+    return {"eol": current[0], "exclude": list(current[1]), "require_approval": required}
 
 
 def integrity(store, conn):

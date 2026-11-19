@@ -5,7 +5,7 @@ from pathlib import Path
 import sqlite3
 import subprocess
 import sys
-from .kernel import configure, dispatch, recover, set_quota, grant, pause, renew, reserve, resume, revoke
+from .kernel import approve, configure, dispatch, recover, set_quota, grant, pause, renew, reserve, resume, revoke
 from .completion import complete, depend, freeze, release, verify
 from .isolation import run_worker
 from .mutation import mutate
@@ -111,6 +111,12 @@ def main(argv=None):
     configure_parser.add_argument('--eol', choices=('none', 'crlf'))
     configure_parser.add_argument('--exclude', action='append', default=[], metavar='DIR/')
     configure_parser.add_argument('--clear-excludes', action='store_true')
+    configure_parser.add_argument('--require-approval', choices=('on', 'off'))
+    approve_parser = sub.add_parser('approve', description='Trusted supervisor only. Approves one exact patch for one lease generation.')
+    for field in ('repository', 'database', 'run_id', 'task_id'):
+        approve_parser.add_argument(field)
+    approve_parser.add_argument('generation', type=int)
+    approve_parser.add_argument('patch')
     quota_parser = sub.add_parser('quota', description='Trusted supervisor only. Caps mutate, verify or worker uses for a task.')
     for field in ('repository', 'database', 'run_id', 'task_id'):
         quota_parser.add_argument(field)
@@ -182,7 +188,10 @@ def main(argv=None):
                 elif a.command == 'quota':
                     output = set_quota(store, a.run_id, a.task_id, a.kind, a.limit)
                 elif a.command == 'configure':
-                    output = configure(store, a.eol, a.exclude, a.clear_excludes)
+                    output = configure(store, a.eol, a.exclude, a.clear_excludes,
+                                       None if a.require_approval is None else a.require_approval == 'on')
+                elif a.command == 'approve':
+                    output = approve(store, a.run_id, a.task_id, a.generation, repo.private_path(a.patch).read_bytes())
                 elif a.command in ('pause', 'resume'):
                     output = (pause if a.command == 'pause' else resume)(store, a.reason)
                 elif a.command=='status':

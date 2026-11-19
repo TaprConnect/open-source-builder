@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 import time
 
-from .kernel import (_live, _paused, _project, _reason, _schema, completed, digest,
+from .kernel import (_live, _paused, consume, _project, _reason, _schema, completed, digest,
                      integrity)
 from .isolation import run_isolated
 from .mutation import _apply
@@ -113,6 +113,7 @@ def verify(store, run_id, task_id, generation, acceptance, timeout=600):
         if integrity(store, conn):
             raise ValueError("out-of-band worktree changes detected")
         before = state_digest(conn, project, plan["revision"])
+        consume(conn, project, run_id, task_id, "verify")
         nonce = secrets.token_hex(16)
         with tempfile.TemporaryDirectory() as tmp:
             inputs = {}

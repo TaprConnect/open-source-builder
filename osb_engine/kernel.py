@@ -32,6 +32,8 @@ def _project(store):
 
 _EXTRA_TABLES = (
     """CREATE TABLE IF NOT EXISTS kernel_settings_v1 (project TEXT PRIMARY KEY, eol TEXT NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS kernel_quotas_v1 (project TEXT NOT NULL, run_id TEXT NOT NULL, task_id TEXT NOT NULL, kind TEXT NOT NULL, quota INTEGER NOT NULL, PRIMARY KEY(project, run_id, task_id, kind))""",
+    """CREATE TABLE IF NOT EXISTS kernel_usage_v1 (seq INTEGER PRIMARY KEY, project TEXT NOT NULL, run_id TEXT NOT NULL, task_id TEXT NOT NULL, kind TEXT NOT NULL, time_ns INTEGER NOT NULL)""",
     """CREATE TABLE IF NOT EXISTS kernel_exclusions_v1 (project TEXT NOT NULL, prefix TEXT NOT NULL, PRIMARY KEY(project, prefix))""",
     """CREATE TABLE IF NOT EXISTS kernel_patches_v1 (
             dispatch INTEGER PRIMARY KEY, project TEXT NOT NULL, run_id TEXT NOT NULL,
@@ -229,6 +231,40 @@ def policy(conn, project):
     rows = conn.execute("SELECT prefix FROM kernel_exclusions_v1 WHERE project=? ORDER BY prefix",
                         (project,)).fetchall()
     return _eol(conn, project), tuple(r[0] for r in rows)
+
+
+QUOTA_KINDS = ("mutate", "verify", "worker")
+
+
+def set_quota(store, run_id, task_id, kind, limit):
+    """Supervisor caps how many times a task may mutate, verify or run a worker."""
+    if kind not in QUOTA_KINDS:
+        raise ValueError("quota kind must be mutate, verify or worker")
+    if type(limit) is not int or not 0 <= limit <= 100000:
+        raise ValueError("quota limit must be 0 to 100000")
+    conn, project = store.conn, _project(store)
+    with conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _schema(conn)
+        if not any(t["id"] == task_id for t in store.view(run_id)["tasks"]):
+            raise ValueError("unknown plan task")
+        conn.execute("""INSERT INTO kernel_quotas_v1 VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(project, run_id, task_id, kind) DO UPDATE SET quota=excluded.quota""",
+                     (project, run_id, task_id, kind, limit))
+    return {"run_id": run_id, "task_id": task_id, "kind": kind, "limit": limit}
+
+
+def consume(conn, project, run_id, task_id, kind):
+    """Record one use inside the caller's write transaction, refusing beyond the quota."""
+    row = conn.execute("SELECT quota FROM kernel_quotas_v1 WHERE project=? AND run_id=? AND task_id=? AND kind=?",
+                       (project, run_id, task_id, kind)).fetchone()
+    if row is not None:
+        used = conn.execute("SELECT COUNT(*) FROM kernel_usage_v1 WHERE project=? AND run_id=? AND task_id=? AND kind=?",
+                            (project, run_id, task_id, kind)).fetchone()[0]
+        if used >= row[0]:
+            raise ValueError(f"{kind} quota exhausted")
+    conn.execute("INSERT INTO kernel_usage_v1 (project, run_id, task_id, kind, time_ns) VALUES (?, ?, ?, ?, ?)",
+                 (project, run_id, task_id, kind, time.time_ns()))
 
 
 _EOL = ("none", "crlf")

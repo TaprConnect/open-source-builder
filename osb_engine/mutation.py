@@ -13,7 +13,7 @@ import stat
 import subprocess
 import time
 
-from .kernel import (_live, policy, _path, _paused, _project, _schema, covered, digest,
+from .kernel import (_live, consume, policy, _path, _paused, _project, _schema, covered, digest,
                      granted_scope, integrity, worktree_changes)
 
 MAX_PATCH = 8 * 1024 * 1024
@@ -111,6 +111,7 @@ def mutate(store, run_id, task_id, generation, token, patch):
             raise ValueError("out-of-band worktree changes detected")
         for path in changes:
             _safe_target(root, path)
+        consume(conn, project, run_id, task_id, "mutate")
         before = {p: digest(root, p) for p in changes}
         try:
             repo.git("apply", "--check", "--whitespace=nowarn", "-", data=patch)

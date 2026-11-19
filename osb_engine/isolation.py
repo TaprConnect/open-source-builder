@@ -14,6 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from .kernel import _live, _paused, _project, _schema, consume
 from .mutation import MAX_PATCH, mutate
 
 _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
@@ -107,6 +108,14 @@ def run_worker(store, run_id, task_id, generation, token, outbox, argv, inputs=N
     if _inside(database, root) or _inside(database, common):
         raise ValueError("store must be outside the checkout")
     repo.assert_current()
+    conn, project = store.conn, _project(store)
+    with conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _schema(conn)
+        if _paused(conn, project):
+            raise ValueError("project dispatch paused")
+        _live(store, run_id, task_id, generation, token)
+        consume(conn, project, run_id, task_id, "worker")
     try:
         result = subprocess.run(_command(root, outbox, checked, list(argv)), capture_output=True,
                                 timeout=timeout, env={"PATH": "/usr/bin:/bin"}, stdin=subprocess.DEVNULL)

@@ -5,7 +5,7 @@ from pathlib import Path
 import sqlite3
 import subprocess
 import sys
-from .kernel import configure, dispatch, grant, pause, renew, reserve, resume, revoke
+from .kernel import configure, dispatch, set_quota, grant, pause, renew, reserve, resume, revoke
 from .completion import complete, depend, freeze, release, verify
 from .isolation import run_worker
 from .mutation import mutate
@@ -111,6 +111,11 @@ def main(argv=None):
     configure_parser.add_argument('--eol', choices=('none', 'crlf'))
     configure_parser.add_argument('--exclude', action='append', default=[], metavar='DIR/')
     configure_parser.add_argument('--clear-excludes', action='store_true')
+    quota_parser = sub.add_parser('quota', description='Trusted supervisor only. Caps mutate, verify or worker uses for a task.')
+    for field in ('repository', 'database', 'run_id', 'task_id'):
+        quota_parser.add_argument(field)
+    quota_parser.add_argument('--kind', required=True)
+    quota_parser.add_argument('--limit', type=int, required=True)
     for command in ('pause', 'resume'):
         control = sub.add_parser(command, description="Trusted supervisor only.")
         control.add_argument('repository')
@@ -169,6 +174,8 @@ def main(argv=None):
                         raise ValueError('inputs must be NAME=PATH')
                     output = run_worker(store, a.run_id, a.task_id, a.generation, token,
                                         a.outbox, worker_argv, inputs, a.timeout)
+                elif a.command == 'quota':
+                    output = set_quota(store, a.run_id, a.task_id, a.kind, a.limit)
                 elif a.command == 'configure':
                     output = configure(store, a.eol, a.exclude, a.clear_excludes)
                 elif a.command in ('pause', 'resume'):

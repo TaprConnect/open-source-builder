@@ -33,7 +33,8 @@ def valid_facts(result):
     facts = result.get("facts", {})
     if not isinstance(facts, dict):
         return False
-    known = {"definitions", "imports", "references", "exports", "main_guard", "keys", "tables", "dependencies"}
+    known = {"definitions", "imports", "references", "exports", "main_guard", "keys", "tables", "dependencies",
+             "routes", "env", "issues"}
     if set(facts) - known:
         return False
     for d in facts.get("definitions", []):
@@ -44,10 +45,18 @@ def valid_facts(result):
         if not (isinstance(i, dict) and set(i) == {"module", "names", "level", "line"} and _text(i["module"])
                 and _texts(i["names"]) and _count(i["level"]) and _count(i["line"])):
             return False
+    for r in facts.get("routes", []):
+        if not (isinstance(r, dict) and set(r) == {"path", "methods", "function", "line"} and _text(r["path"])
+                and _texts(r["methods"]) and _text(r["function"]) and _count(r["line"])):
+            return False
+    for i in facts.get("issues", []):
+        if not (isinstance(i, dict) and set(i) == {"kind", "function", "line"} and _text(i["function"]) and _count(i["line"])
+                and i["kind"] in ("placeholder", "not_implemented", "swallowed_exception", "bare_except")):
+            return False
     for t in facts.get("tables", []):
         if not (isinstance(t, dict) and set(t) == {"name", "columns"} and _text(t["name"]) and _texts(t["columns"])):
             return False
-    if any(k in facts and not _texts(facts[k], 2_000_000) for k in ("references", "exports", "keys", "dependencies")):
+    if any(k in facts and not _texts(facts[k], 2_000_000) for k in ("references", "exports", "keys", "dependencies", "env")):
         return False
     return "main_guard" not in facts or isinstance(facts["main_guard"], bool)
 
@@ -202,6 +211,23 @@ def build_index(repo, extractor=None):
                 continue
             dead.append({"path": f["path"], "symbol": name, "kind": d["kind"], "line": d["line"],
                          "confidence": "candidate", "note": "no static reference in this repository"})
+    routes, environment, issues = [], {}, []
+    for f in python:
+        facts = f["facts"]
+        routes += [{**r, "file": f["path"]} for r in facts.get("routes", [])]
+        for name in facts.get("env", []):
+            environment.setdefault(name, []).append(f["path"])
+        issues += [{"path": f["path"], **i} for i in facts.get("issues", [])]
+
+    def is_test(path):
+        base = path.rsplit("/", 1)[-1]
+        return base.startswith("test_") or base.endswith("_test.py") or path.startswith("tests/") or "/tests/" in path
+    tests = {}
+    for a, b in edges:
+        if is_test(a) and not is_test(b):
+            tests.setdefault(b, []).append(a)
+    untested = sorted(f["path"] for f in python if not is_test(f["path"]) and not f["path"].endswith("__init__.py")
+                      and f["path"] not in tests)
     for f in files:
         facts = f.get("facts", {})
         if f["language"] == "python" and facts:
@@ -214,6 +240,10 @@ def build_index(repo, extractor=None):
                       "external": sorted(external), "external_classified": dict(sorted(classified.items()))},
             "missing_dependencies": [{"module": m, "files": sorted(fs)} for m, fs in sorted(missing.items())],
             "entry_points": entry_points, "dead_code_candidates": dead,
+            "routes": sorted(routes, key=lambda r: (r["file"], r["line"], r["path"])),
+            "environment": {k: sorted(set(v)) for k, v in sorted(environment.items())},
+            "issues": sorted(issues, key=lambda i: (i["path"], i["line"], i["kind"])),
+            "tests": {k: sorted(v) for k, v in sorted(tests.items())}, "untested_sources": untested,
             "summary": {"states": dict(sorted(states.items())), "imports": total,
                         "resolution_rate": round(resolved / total, 4) if total else 1.0},
             "limits": ["Static indexing only: no file is SEMANTICALLY_REVIEWED or RUNTIME_VERIFIED.",

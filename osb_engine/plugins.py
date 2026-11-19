@@ -13,6 +13,66 @@ VERSION = "1"
 _LIMIT = 5000
 
 
+_VERBS = {"get", "post", "put", "patch", "delete"}
+
+
+def _const(node):
+    return node.value if isinstance(node, ast.Constant) and isinstance(node.value, str) else None
+
+
+def _is_docstring(statement):
+    return isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant) and isinstance(statement.value.value, str)
+
+
+def _domain(tree):
+    """Routes, environment-variable reads and per-function implementation issues."""
+    routes, env, issues = [], set(), []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for dec in node.decorator_list:
+                if isinstance(dec, ast.Call) and isinstance(dec.func, ast.Attribute) and dec.args and _const(dec.args[0]) is not None:
+                    attr = dec.func.attr.lower()
+                    if attr in _VERBS:
+                        methods = [attr.upper()]
+                    elif attr == "route":
+                        methods = ["GET"]
+                        for kw in dec.keywords:
+                            if kw.arg == "methods" and isinstance(kw.value, (ast.List, ast.Tuple)):
+                                methods = [str(_const(e)).upper() for e in kw.value.elts if _const(e) is not None]
+                    else:
+                        continue
+                    routes.append({"path": _const(dec.args[0]), "methods": sorted(methods), "function": node.name, "line": dec.lineno})
+            body = [s for s in node.body if not _is_docstring(s)] if node.body and _is_docstring(node.body[0]) else node.body
+            if not body or all(isinstance(s, ast.Pass) or (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant)
+                                                          and s.value.value is Ellipsis) for s in body):
+                issues.append({"kind": "placeholder", "function": node.name, "line": node.lineno})
+            elif len(body) == 1 and isinstance(body[0], ast.Raise) and body[0].exc is not None:
+                exc = body[0].exc.func if isinstance(body[0].exc, ast.Call) else body[0].exc
+                if isinstance(exc, ast.Name) and exc.id == "NotImplementedError":
+                    issues.append({"kind": "not_implemented", "function": node.name, "line": node.lineno})
+            for handler in ast.walk(node):
+                if isinstance(handler, ast.ExceptHandler):
+                    if handler.type is None:
+                        issues.append({"kind": "bare_except", "function": node.name, "line": handler.lineno})
+                    elif all(isinstance(s, ast.Pass) for s in handler.body):
+                        issues.append({"kind": "swallowed_exception", "function": node.name, "line": handler.lineno})
+        elif isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Name) and func.id in ("path", "re_path") and len(node.args) >= 2 and _const(node.args[0]) is not None:
+                view = node.args[1]
+                name = view.id if isinstance(view, ast.Name) else view.attr if isinstance(view, ast.Attribute) else None
+                if name:
+                    routes.append({"path": _const(node.args[0]), "methods": ["ANY"], "function": name, "line": node.lineno})
+            if isinstance(func, ast.Attribute) and node.args and _const(node.args[0]) is not None and (
+                    (func.attr == "getenv" and isinstance(func.value, ast.Name) and func.value.id == "os")
+                    or (func.attr == "get" and isinstance(func.value, ast.Attribute) and func.value.attr == "environ")):
+                env.add(_const(node.args[0]))
+        elif isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute) and node.value.attr == "environ" \
+                and _const(node.slice) is not None:
+            env.add(_const(node.slice))
+    return routes, sorted(env), issues
+
+
 def _python(data):
     try:
         tree = ast.parse(data)
@@ -40,7 +100,9 @@ def _python(data):
             references.add(node.id)
         elif isinstance(node, ast.Attribute):
             references.add(node.attr)
-    return {"state": "SYMBOL_INDEXED", "facts": {"definitions": definitions[:_LIMIT], "imports": imports[:_LIMIT],
+    routes, env, issues = _domain(tree)
+    return {"state": "SYMBOL_INDEXED", "facts": {"routes": routes[:_LIMIT], "env": env[:_LIMIT], "issues": issues[:_LIMIT],
+                                                 "definitions": definitions[:_LIMIT], "imports": imports[:_LIMIT],
                                                  "references": sorted(references)[:20 * _LIMIT],
                                                  "exports": exports[:_LIMIT], "main_guard": main_guard}}
 

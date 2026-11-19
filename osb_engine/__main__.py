@@ -82,7 +82,7 @@ def _main(argv):
         if name in ('audit','plan','status','transition'):
             p.add_argument('database')
         if name in ('audit','plan'):
-            p.add_argument('--catalogue',default=str(Path(__file__).resolve().parent.parent/'profiles'/'checks.tsv'))
+            p.add_argument('--catalogue',default=str(Path(__file__).resolve().parent/'profiles'/'checks.tsv'))
             p.add_argument('--config',help='private versioned JSON configuration outside the target')
             p.add_argument('--working-tree',action='store_true',help='analyse uncommitted files (audit only; never cached or planned)')
             p.add_argument('--max-blob',type=int)
@@ -323,8 +323,9 @@ def _main(argv):
             if output.get('run_id'):
                 _EVENT['run_id']=output['run_id']
             report=output.get('report') if isinstance(output.get('report'),dict) else {}
-            _EVENT['counts']={'files':len(report.get('files',[])),'findings':len(report.get('findings',[])),
-                              'tasks':len(output.get('tasks',[]))}
+            size=lambda v: len(v) if isinstance(v,list) else (v if isinstance(v,int) else 0)
+            _EVENT['counts']={'files':size(report.get('files')),'findings':size(report.get('findings')),
+                              'tasks':size(output.get('tasks'))}
         if getattr(a,'format','json')=='text':
             sys.stdout.write(text_report(a.command,output))
         else:

@@ -15,3 +15,6 @@ osb = "osb_engine.__main__:main"
 
 [tool.setuptools]
 packages = ["osb_engine"]
+
+[tool.setuptools.package-data]
+osb_engine = ["profiles/*.tsv"]

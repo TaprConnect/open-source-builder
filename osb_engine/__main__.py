@@ -5,7 +5,7 @@ from pathlib import Path
 import sqlite3
 import subprocess
 import sys
-from .kernel import dispatch, grant, pause, renew, reserve, resume, revoke
+from .kernel import configure, dispatch, grant, pause, renew, reserve, resume, revoke
 from .completion import complete, depend, freeze, release, verify
 from .isolation import run_worker
 from .mutation import mutate
@@ -105,6 +105,10 @@ def main(argv=None):
     worker.add_argument('--input', action='append', default=[], metavar='NAME=PATH')
     worker.add_argument('--timeout', type=int, default=600)
     worker.epilog = "Place the worker command after a literal --."
+    configure_parser = sub.add_parser('configure', description='Trusted supervisor only. Declares the checkout line-ending policy.')
+    configure_parser.add_argument('repository')
+    configure_parser.add_argument('database')
+    configure_parser.add_argument('--eol', choices=('none', 'crlf'), required=True)
     for command in ('pause', 'resume'):
         control = sub.add_parser(command, description="Trusted supervisor only.")
         control.add_argument('repository')
@@ -163,6 +167,8 @@ def main(argv=None):
                         raise ValueError('inputs must be NAME=PATH')
                     output = run_worker(store, a.run_id, a.task_id, a.generation, token,
                                         a.outbox, worker_argv, inputs, a.timeout)
+                elif a.command == 'configure':
+                    output = configure(store, a.eol)
                 elif a.command in ('pause', 'resume'):
                     output = (pause if a.command == 'pause' else resume)(store, a.reason)
                 elif a.command=='status':

@@ -30,6 +30,7 @@ def _project(store):
 
 
 _EXTRA_TABLES = (
+    """CREATE TABLE IF NOT EXISTS kernel_settings_v1 (project TEXT PRIMARY KEY, eol TEXT NOT NULL)""",
     """CREATE TABLE IF NOT EXISTS kernel_patches_v1 (
             dispatch INTEGER PRIMARY KEY, project TEXT NOT NULL, run_id TEXT NOT NULL,
             task_id TEXT NOT NULL, generation INTEGER NOT NULL, patch BLOB NOT NULL,
@@ -146,7 +147,7 @@ def digest(root, path):
     return value
 
 
-def worktree_changes(repo):
+def worktree_changes(repo, eol="none"):
     """Paths whose worktree content or mode differs from the pinned revision, plus every
     untracked path. Independent of the live index, Git's stat cache and ignore rules."""
     root = str(repo.root)
@@ -178,11 +179,55 @@ def worktree_changes(repo):
             # Gitlinks: nested checkouts are not compared yet, so fail closed.
             changed.add(path)
     if regular:
-        listing = "".join(p + "\n" for p, _ in regular).encode()
-        # Byte-exact: .gitattributes filters (eol, ident, clean) must not normalise tampering away.
-        hashes = repo.git("hash-object", "--no-filters", "--stdin-paths", data=listing).decode().split()
-        changed.update(p for (p, oid), h in zip(regular, hashes) if h != oid)
+        # Byte-exact, computed by the kernel: no .gitattributes filter or Git configuration
+        # can normalise tampering away. Under the supervisor's crlf policy the only other
+        # accepted form is the complete LF->CRLF conversion of an LF-only text blob.
+        algorithm = repo.git("rev-parse", "--show-object-format").decode().strip() or "sha1"
+        blob_id = lambda data: hashlib.new(algorithm, b"blob %d\0" % len(data) + data).hexdigest()
+        for path, oid in regular:
+            with open(os.path.join(root, *path.split("/")), "rb") as handle:
+                data = handle.read()
+            if _matches(data, oid, eol, blob_id):
+                continue
+            changed.add(path)
     return changed
+
+
+def _matches(data, oid, eol, blob_id):
+    """Accept the raw blob, Git's exact ident expansion of this blob's own id, and under
+    the crlf policy the complete LF->CRLF conversion of an LF-only text blob."""
+    candidates = [data]
+    if eol == "crlf" and b"\0" not in data:
+        lf = data.replace(b"\r\n", b"\n")
+        if b"\r" not in lf and lf.replace(b"\n", b"\r\n") == data:
+            candidates.append(lf)
+    expanded = b"$Id: " + oid.encode() + b" $"
+    for candidate in candidates:
+        if blob_id(candidate) == oid or expanded in candidate and blob_id(
+                candidate.replace(expanded, b"$Id$")) == oid:
+            return True
+    return False
+
+
+_EOL = ("none", "crlf")
+
+
+def _eol(conn, project):
+    row = conn.execute("SELECT eol FROM kernel_settings_v1 WHERE project=?", (project,)).fetchone()
+    return row[0] if row else "none"
+
+
+def configure(store, eol):
+    """Supervisor declares how the checkout's line endings relate to committed blobs."""
+    if eol not in _EOL:
+        raise ValueError("eol policy must be none or crlf")
+    conn, project = store.conn, _project(store)
+    with conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _schema(conn)
+        conn.execute("""INSERT INTO kernel_settings_v1 (project, eol) VALUES (?, ?)
+            ON CONFLICT(project) DO UPDATE SET eol=excluded.eol""", (project, eol))
+    return {"eol": eol}
 
 
 def integrity(store, conn):
@@ -190,7 +235,7 @@ def integrity(store, conn):
     ledger = dict(conn.execute("SELECT path, current FROM kernel_ledger_v1 WHERE project=?",
                                (_project(store),)).fetchall())
     root = str(store.repo.root)
-    problems = sorted(p for p in worktree_changes(store.repo) if p not in ledger)
+    problems = sorted(p for p in worktree_changes(store.repo, _eol(conn, _project(store))) if p not in ledger)
     problems += sorted(p for p, h in ledger.items() if digest(root, p) != h)
     return problems
 

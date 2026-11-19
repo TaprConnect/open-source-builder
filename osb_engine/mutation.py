@@ -13,7 +13,7 @@ import stat
 import subprocess
 import time
 
-from .kernel import (_live, _path, _paused, _project, _schema, covered, digest,
+from .kernel import (_eol, _live, _path, _paused, _project, _schema, covered, digest,
                      granted_scope, integrity, worktree_changes)
 
 MAX_PATCH = 8 * 1024 * 1024
@@ -123,7 +123,7 @@ def mutate(store, run_id, task_id, generation, token, patch):
                 _safe_target(root, path)
             ledger = dict(conn.execute("SELECT path, current FROM kernel_ledger_v1 WHERE project=?",
                                        (project,)).fetchall())
-            stray = [p for p in worktree_changes(repo) if p not in changes and p not in ledger]
+            stray = [p for p in worktree_changes(repo, _eol(conn, project)) if p not in changes and p not in ledger]
             stray += [p for p, h in ledger.items() if p not in changes and digest(root, p) != h]
             if stray:
                 raise ValueError("changes outside the patch appeared during apply")

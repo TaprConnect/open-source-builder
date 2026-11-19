@@ -3,20 +3,31 @@
 Completion authority comes only from verification the supervisor ran itself
 and recorded in the private store. The worker presents its bearer and nothing
 else, so it cannot supply a receipt or choose the acceptance script.
-verify() runs repository code as the calling user: run the supervisor inside
-an isolation boundary until worker/verifier isolation (S02-005) exists.
+verify() runs the frozen acceptance only under OS isolation (S02-010) and refuses
+on hosts without it.
 """
 import hashlib
 import json
 import os
+import secrets
 import subprocess
-import sys
 import tempfile
 import time
 
 from .kernel import (_live, _paused, _project, _reason, _schema, completed, digest,
                      integrity)
+from .isolation import run_isolated
 from .mutation import _apply
+
+# Kernel-owned wrapper: the sentinel is printed only if the acceptance returns normally,
+# so repository code that exits the interpreter early cannot produce a pass.
+_RUNNER = b"""import os, runpy, sys
+nonce = os.environ.pop("OSB_VERIFY_NONCE")
+sys.argv = ["/inputs/acceptance.py"]
+runpy.run_path("/inputs/acceptance.py", run_name="__main__")
+sys.stdout.flush()
+os.write(1, ("\\nOSB-VERIFY-PASS " + nonce + "\\n").encode())
+"""
 
 
 def _sha(data):
@@ -102,21 +113,21 @@ def verify(store, run_id, task_id, generation, acceptance, timeout=600):
         if integrity(store, conn):
             raise ValueError("out-of-band worktree changes detected")
         before = state_digest(conn, project, plan["revision"])
+        nonce = secrets.token_hex(16)
         with tempfile.TemporaryDirectory() as tmp:
-            script = os.path.join(tmp, "acceptance.py")
-            with open(script, "wb") as handle:
-                handle.write(acceptance)
-            env = {k: os.environ[k] for k in ("PATH", "SYSTEMROOT", "TEMP", "TMP") if k in os.environ}
-            env.update(PYTHONDONTWRITEBYTECODE="1", HOME=tmp)
-            try:
-                result = subprocess.run([sys.executable, "-I", "-B", script], cwd=str(repo.root),
-                                        env=env, capture_output=True, timeout=timeout)
-                code, output = result.returncode, result.stdout + b"\0" + result.stderr
-            except subprocess.TimeoutExpired:
-                code, output = -1, b"timeout"
+            inputs = {}
+            for name, data in (("acceptance.py", acceptance), ("runner.py", _RUNNER)):
+                inputs[name] = os.path.join(tmp, name)
+                with open(inputs[name], "wb") as handle:
+                    handle.write(data)
+            code, out, err = run_isolated(repo.root, ["python3", "-I", "-B", "/inputs/runner.py"], inputs,
+                                          timeout, {"OSB_VERIFY_NONCE": nonce, "PYTHONDONTWRITEBYTECODE": "1"})
+        lines = out.decode("utf-8", "replace").strip().splitlines()
+        sentinel = bool(lines) and lines[-1] == "OSB-VERIFY-PASS " + nonce
+        output = out + b"\0" + err
         repo.assert_current()
         unchanged = not integrity(store, conn) and state_digest(conn, project, plan["revision"]) == before
-        passed = code == 0 and unchanged
+        passed = code == 0 and sentinel and unchanged
         seq = conn.execute("""
             INSERT INTO kernel_verifications_v1 (project, run_id, task_id, generation, revision,
                 acceptance, state, returncode, passed, output_sha256, time_ns)

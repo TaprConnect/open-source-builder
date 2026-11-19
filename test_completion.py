@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from osb_engine import completion, mutation
+from osb_engine import completion, isolation, mutation
 from osb_engine.audit import scan
 from osb_engine.kernel import _schema, grant, reserve
 from osb_engine.repository import Repository
@@ -50,14 +50,32 @@ class CompletionTests(unittest.TestCase):
             _schema(conn)
             self.assertTrue(conn.in_transaction)
 
-    def test_verification_that_writes_to_the_worktree_fails(self):
+    @unittest.skipUnless(isolation.available(), "verification requires OS isolation")
+    def test_verification_cannot_write_the_worktree(self):
         script = b"open('stray.txt', 'w').write('x')\n"
         completion.freeze(self.store, self.run_id, self.task, script)
         result = completion.verify(self.store, self.run_id, self.task, self.gen, script)
         self.assertFalse(result["passed"])
-        self.assertEqual(result["returncode"], 0)
+        self.assertFalse((self.target / "stray.txt").exists())
         with self.assertRaises(ValueError):
             completion.complete(self.store, self.run_id, self.task, self.gen, self.token)
+
+    @unittest.skipUnless(isolation.available(), "verification requires OS isolation")
+    def test_early_interpreter_exit_is_not_a_pass(self):
+        script = b"import os\nos._exit(0)\n"
+        completion.freeze(self.store, self.run_id, self.task, script)
+        result = completion.verify(self.store, self.run_id, self.task, self.gen, script)
+        self.assertEqual(result["returncode"], 0)
+        self.assertFalse(result["passed"])
+
+    def test_verification_refuses_without_isolation(self):
+        script = b"pass\n"
+        completion.freeze(self.store, self.run_id, self.task, script)
+        with patch.object(isolation, "available", return_value=False), \
+                patch.object(isolation, "_command", side_effect=AssertionError("must not run")):
+            with self.assertRaisesRegex(ValueError, "unavailable"):
+                completion.verify(self.store, self.run_id, self.task, self.gen, script)
+        self.assertEqual(self.count("kernel_verifications_v1"), 0)
 
     def test_failed_revert_restores_worktree_and_records_no_release(self):
         mutation.mutate(self.store, self.run_id, self.task, self.gen, self.token, P1)

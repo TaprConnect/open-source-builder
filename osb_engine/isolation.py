@@ -28,7 +28,7 @@ def _inside(path, parent):
     return path == parent or path.is_relative_to(parent)
 
 
-def _command(root, outbox, inputs, argv):
+def _command(root, outbox, inputs, argv, env=None):
     cmd = ["bwrap", "--unshare-all", "--die-with-parent", "--new-session", "--clearenv",
            "--cap-drop", "ALL", "--ro-bind", "/usr", "/usr"]
     for name in ("bin", "lib", "lib64", "sbin"):
@@ -38,11 +38,27 @@ def _command(root, outbox, inputs, argv):
         elif host.is_dir():
             cmd += ["--ro-bind", str(host), "/" + name]
     cmd += ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
-            "--ro-bind", str(root), "/work", "--bind", str(outbox), "/outbox"]
+            "--ro-bind", str(root), "/work"]
+    if outbox is not None:
+        cmd += ["--bind", str(outbox), "/outbox"]
     for name, path in sorted(inputs.items()):
         cmd += ["--ro-bind", str(path), "/inputs/" + name]
+    for key, value in sorted((env or {}).items()):
+        cmd += ["--setenv", key, value]
     return cmd + ["--chdir", "/work", "--setenv", "HOME", "/tmp", "--setenv", "PATH",
                   "/usr/bin:/bin", "--", *argv]
+
+
+def run_isolated(root, argv, inputs, timeout, env=None):
+    """Run argv with the checkout read-only and no writable host path; return (code, stdout, stderr)."""
+    if not available():
+        raise ValueError("isolation unavailable on this host")
+    try:
+        result = subprocess.run(_command(root, None, inputs, list(argv), env), capture_output=True,
+                                timeout=timeout, env={"PATH": "/usr/bin:/bin"}, stdin=subprocess.DEVNULL)
+        return result.returncode, result.stdout[-_MAX_OUTPUT:], result.stderr[-_MAX_OUTPUT:]
+    except subprocess.TimeoutExpired:
+        return -1, b"", b"timeout"
 
 
 def _patches(outbox):

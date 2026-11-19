@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import sqlite3
 import stat
+import time
 
 
 def canonical(value):
@@ -44,6 +45,9 @@ class Store:
             repository TEXT NOT NULL, oid TEXT NOT NULL, language TEXT NOT NULL,
             version TEXT NOT NULL, payload TEXT NOT NULL,
             PRIMARY KEY(repository, oid, language, version));
+        CREATE TABLE IF NOT EXISTS engine_cache_v2 (
+            key TEXT PRIMARY KEY, payload TEXT NOT NULL, payload_sha256 TEXT NOT NULL,
+            size INTEGER NOT NULL, created_ns INTEGER NOT NULL, last_used_ns INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS engine_runs (
             id TEXT PRIMARY KEY, repository TEXT NOT NULL, revision TEXT NOT NULL, report TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS engine_tasks (
@@ -71,6 +75,55 @@ class Store:
         with self.conn:
             self.conn.execute('INSERT OR REPLACE INTO engine_cache VALUES (?,?,?,?,?)',
                               (str(self.repo.root), oid, language, version, canonical(payload)))
+
+    # F01-CACHE: bounded, keyed, integrity-checked analysis cache (S03-004).
+    def cache_key(self, oid, language, version, context):
+        return identity([str(self.repo.root), oid, language, version, context])
+
+    def cached_v2(self, key, validate):
+        """Return a cached payload, or None. Digest or schema failures delete the entry."""
+        row = self.conn.execute('SELECT payload, payload_sha256 FROM engine_cache_v2 WHERE key=?', (key,)).fetchone()
+        if not row:
+            return None
+        try:
+            value = json.loads(row[0]) if hashlib.sha256(row[0].encode()).hexdigest() == row[1] else None
+        except ValueError:
+            value = None
+        if value is None or not validate(value):
+            with self.conn:
+                self.conn.execute('DELETE FROM engine_cache_v2 WHERE key=?', (key,))
+            self.cache_corrupt = getattr(self, 'cache_corrupt', 0) + 1
+            return None
+        with self.conn:
+            self.conn.execute('UPDATE engine_cache_v2 SET last_used_ns=? WHERE key=?', (time.time_ns(), key))
+        return value
+
+    def cache_v2(self, key, payload):
+        text = canonical(payload)
+        now = time.time_ns()
+        with self.conn:
+            self.conn.execute('INSERT OR REPLACE INTO engine_cache_v2 VALUES (?,?,?,?,?,?)',
+                              (key, text, hashlib.sha256(text.encode()).hexdigest(), len(text), now, now))
+
+    def evict(self, max_entries, max_bytes, retention_days):
+        """Deterministic eviction: expired first, then least recently used (ties by key)."""
+        if not (1 <= max_entries <= 10**7 and 1 <= max_bytes <= 2**40 and 0 <= retention_days <= 3650):
+            raise ValueError('cache limits out of range')
+        with self.conn:
+            self.conn.execute('BEGIN IMMEDIATE')
+            cutoff = time.time_ns() - retention_days * 86400 * 10**9
+            self.conn.execute('DELETE FROM engine_cache_v2 WHERE last_used_ns < ?', (cutoff,))
+            count, size = self.conn.execute('SELECT COUNT(*), COALESCE(SUM(size), 0) FROM engine_cache_v2').fetchone()
+            for key, item in self.conn.execute('SELECT key, size FROM engine_cache_v2 ORDER BY last_used_ns, key').fetchall():
+                if count <= max_entries and size <= max_bytes:
+                    break
+                self.conn.execute('DELETE FROM engine_cache_v2 WHERE key=?', (key,))
+                count, size = count - 1, size - item
+
+    def cache_clear(self):
+        with self.conn:
+            self.conn.execute('DELETE FROM engine_cache_v2')
+        return {'cleared': True}
 
     def save(self, report):
         key = identity([str(self.repo.root), report])

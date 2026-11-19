@@ -39,6 +39,9 @@ def main(argv=None):
             p.add_argument('--analysis-memory',type=int,default=512,help='MiB')
             p.add_argument('--trusted-target',action='store_true',help='analyse in-process when isolation is unavailable')
             p.add_argument('--analysis-budget',type=int,default=600,help='seconds for all isolated analysis')
+            p.add_argument('--cache-max-entries',type=int,default=100000)
+            p.add_argument('--cache-max-bytes',type=int,default=256*1024*1024)
+            p.add_argument('--cache-retention-days',type=int,default=30)
         if name in ('status','transition'):
             p.add_argument('run_id')
         if name=='transition':
@@ -134,6 +137,9 @@ def main(argv=None):
     recover_parser = sub.add_parser('recover', description='Trusted supervisor only. Resolves an interrupted kernel operation.')
     recover_parser.add_argument('repository')
     recover_parser.add_argument('database')
+    cache_parser = sub.add_parser('cache-clear', description='Trusted supervisor only. Empties the analysis cache.')
+    cache_parser.add_argument('repository')
+    cache_parser.add_argument('database')
     for command in ('pause', 'resume'):
         control = sub.add_parser(command, description="Trusted supervisor only.")
         control.add_argument('repository')
@@ -158,7 +164,11 @@ def main(argv=None):
                         print('warning: analysing repository content in-process without isolation (trusted target asserted)', file=sys.stderr)
                     else:
                         raise ValueError('analysis isolation unavailable; use --trusted-target only for trusted repositories')
-                    report,metrics=scan(repo,store,catalogue(a.catalogue),a.max_blob,a.max_total,analyser)
+                    context={'trust':mode}
+                    if mode=='isolated':
+                        context.update(cpu=a.analysis_cpu,memory=a.analysis_memory)
+                    report,metrics=scan(repo,store,catalogue(a.catalogue),a.max_blob,a.max_total,analyser,context,
+                                        (a.cache_max_entries,a.cache_max_bytes,a.cache_retention_days))
                     output={'report':report,'metrics':{**metrics,'analysis':mode}}
                     if a.command=='plan':
                         output['run_id']=store.save(report)
@@ -201,6 +211,8 @@ def main(argv=None):
                         raise ValueError('inputs must be NAME=PATH')
                     output = run_worker(store, a.run_id, a.task_id, a.generation, token,
                                         a.outbox, worker_argv, inputs, a.timeout)
+                elif a.command == 'cache-clear':
+                    output = store.cache_clear()
                 elif a.command == 'recover':
                     output = recover(store)
                 elif a.command == 'quota':

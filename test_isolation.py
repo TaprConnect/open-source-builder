@@ -78,3 +78,13 @@ class IsolationTests(unittest.TestCase):
         os.link(secret, self.outbox / "2.patch")
         found = isolation._patches(self.outbox)
         self.assertEqual([(n, d) for n, d, _ in found], [("1.patch", None), ("2.patch", None)])
+
+
+class ProbeTests(unittest.TestCase):
+    def test_unusable_bwrap_counts_as_unavailable(self):
+        failing = subprocess.CompletedProcess([], 1, b"", b"bwrap: No permissions to create new namespace")
+        with patch.object(isolation, "_PROBE", None), \
+                patch.object(isolation.sys, "platform", "linux"), \
+                patch.object(isolation.shutil, "which", return_value="/usr/bin/bwrap"), \
+                patch.object(isolation.subprocess, "run", return_value=failing):
+            self.assertFalse(isolation.available())

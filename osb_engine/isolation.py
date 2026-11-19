@@ -21,8 +21,25 @@ _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 _MAX_OUTPUT = 1024 * 1024
 
 
+_PROBE = None
+
+
 def available():
-    return sys.platform.startswith("linux") and shutil.which("bwrap") is not None
+    """True only if bubblewrap can actually create the sandbox here (probed once per process).
+
+    A present but unusable binary (for example inside another sandbox that forbids user
+    namespaces) must count as unavailable, or callers would silently degrade."""
+    global _PROBE
+    if _PROBE is None:
+        _PROBE = False
+        if sys.platform.startswith("linux") and shutil.which("bwrap") is not None:
+            try:
+                _PROBE = subprocess.run(["bwrap", "--unshare-all", "--die-with-parent", "--ro-bind", "/usr", "/usr",
+                                         "--symlink", "usr/bin", "/bin", "--", "/usr/bin/true"],
+                                        capture_output=True, timeout=20, stdin=subprocess.DEVNULL).returncode == 0
+            except (OSError, subprocess.SubprocessError):
+                _PROBE = False
+    return _PROBE
 
 
 def _inside(path, parent):

@@ -145,7 +145,10 @@ class EngineTests(unittest.TestCase):
         catalogue_path=self.private/'checks.tsv'
         catalogue_path.write_text('domain\tactivates_when\tevidence\trequired_outcome\nBackend\tx\ty\tz\nIdentity\tx\ty\tz\n')
         command=[sys.executable,'-m','osb_engine']
-        result=json.loads(subprocess.check_output(command+['plan',str(self.root),str(self.db),'--catalogue',str(catalogue_path)]))
+        from osb_engine.isolation import available
+        # Synthetic fixture: assert trust only where isolation is unavailable (S03-001 refuses otherwise).
+        trust=[] if available() else ['--trusted-target']
+        result=json.loads(subprocess.check_output(command+['plan',str(self.root),str(self.db),'--catalogue',str(catalogue_path)]+trust))
         current=json.loads(subprocess.check_output(command+['status',str(self.root),str(self.db),result['run_id']]))
         self.assertFalse(current['stale']); self.assertFalse(current['release_ready']); self.assertTrue(current['tasks'])
         self.assertEqual(len(current['report']['controls']),2)

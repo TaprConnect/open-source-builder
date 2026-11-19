@@ -6,6 +6,14 @@ from .store import identity
 from .controls import evaluate
 
 
+_BLOCKING = {
+    'analysis_failed': 'Isolated analysis failed or ran out of budget; findings for this file are unknown.',
+    'budget_blocked': 'Analysis byte budget exhausted before this file; findings are unknown.',
+    'oversized': 'File exceeds the per-file analysis limit; findings are unknown.',
+    'read_blocked': 'File could not be read from the pinned revision; findings are unknown.',
+}
+
+
 def _in_process(items):
     return {key: analysis.analyse(kind, data) for key, kind, data in items}
 
@@ -60,7 +68,17 @@ def scan(repo, store, catalogue, max_blob=2*1024*1024, max_total=32*1024*1024, a
             finding = {**f, 'path': blob.path, 'blob': blob.oid}
             finding['id'] = identity([repo.revision,blob.path,blob.oid,f,index])
             findings.append(finding)
+    counts = {}
+    for row in files:
+        counts[row['status']] = counts.get(row['status'], 0) + 1
+        if row['language'] is not None and row['status'] in _BLOCKING:
+            finding = {'rule': 'coverage.' + row['status'], 'line': 1, 'state': 'candidate',
+                       'explanation': _BLOCKING[row['status']], 'path': row['path'], 'blob': row['oid']}
+            finding['id'] = identity([repo.revision, row['path'], row['oid'], finding, 'coverage'])
+            findings.append(finding)
+    complete = not any(r['language'] is not None and r['status'] in _BLOCKING for r in files)
     report = {'schema': 2, 'analyser': analysis.VERSION, 'revision': repo.revision,
+              'coverage': {'counts': dict(sorted(counts.items())), 'complete': complete},
               'files': files, 'findings': findings, 'dependencies': analysis.graph(files),
               'controls': evaluate(catalogue, files, findings), 'runtime_verification': 'not_performed',
               'semantic_review': 'not_performed', 'release_ready': False,

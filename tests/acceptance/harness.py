@@ -78,6 +78,9 @@ def run(name, timeout=1800):
                     cmd += ["--symlink", os.readlink(host), "/" + name_]
                 elif host.is_dir():
                     cmd += ["--ro-bind", str(host), "/" + name_]
+            # /etc read-only so the acceptance environment matches a real host (for example the
+            # interpreter's sitecustomize symlink); the kernel's own sandboxes still omit /etc.
+            cmd += ["--ro-bind", "/etc", "/etc"]
             cmd += ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--bind", str(src), "/src",
                     "--ro-bind", str(path), "/acceptance.py", "--chdir", "/src", "--clearenv",
                     "--setenv", "PATH", "/usr/bin:/bin", "--setenv", "HOME", "/tmp",

@@ -11,7 +11,10 @@ from .completion import complete, depend, freeze, release, verify
 from .isolation import available as isolation_available, run_worker
 from .sandboxed import isolated_analyser
 from .mutation import mutate
+from .config import load as load_config, resolve
+from .doctor import doctor, text_report
 from .repository import Repository
+from .store import identity
 from .store import Store
 from .audit import scan
 from .controls import catalogue
@@ -21,11 +24,15 @@ from .repair import check_patch, apply_prepared
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     worker_argv = []
-    if argv[:1] == ['run-worker'] and '--' in argv:
-        split = argv.index('--')
+    if 'run-worker' in argv and '--' in argv[argv.index('run-worker'):]:
+        split = argv.index('--', argv.index('run-worker'))
         argv, worker_argv = argv[:split], argv[split + 1:]
-    parser=argparse.ArgumentParser(description=__doc__)
+    parser=argparse.ArgumentParser(prog='osb',description=__doc__)
+    parser.add_argument('--error-format',choices=('text','json'),default='text')
     sub=parser.add_subparsers(dest='command',required=True)
+    sub.add_parser('doctor',description='Report host capabilities and support classification.')
+    discover_parser=sub.add_parser('discover',description='Resolve a path inside a repository to its root, revision and identity.')
+    discover_parser.add_argument('path')
     for name in ('audit','plan','status','transition','preview','apply'):
         p=sub.add_parser(name)
         p.add_argument('repository')
@@ -33,15 +40,18 @@ def main(argv=None):
             p.add_argument('database')
         if name in ('audit','plan'):
             p.add_argument('--catalogue',default=str(Path(__file__).resolve().parent.parent/'profiles'/'checks.tsv'))
-            p.add_argument('--max-blob',type=int,default=2*1024*1024)
-            p.add_argument('--max-total',type=int,default=32*1024*1024)
-            p.add_argument('--analysis-cpu',type=int,default=10)
-            p.add_argument('--analysis-memory',type=int,default=512,help='MiB')
+            p.add_argument('--config',help='private versioned JSON configuration outside the target')
+            p.add_argument('--max-blob',type=int)
+            p.add_argument('--max-total',type=int)
+            p.add_argument('--analysis-cpu',type=int)
+            p.add_argument('--analysis-memory',type=int,help='MiB')
             p.add_argument('--trusted-target',action='store_true',help='analyse in-process when isolation is unavailable')
-            p.add_argument('--analysis-budget',type=int,default=600,help='seconds for all isolated analysis')
-            p.add_argument('--cache-max-entries',type=int,default=100000)
-            p.add_argument('--cache-max-bytes',type=int,default=256*1024*1024)
-            p.add_argument('--cache-retention-days',type=int,default=30)
+            p.add_argument('--analysis-budget',type=int,help='seconds for all isolated analysis')
+            p.add_argument('--cache-max-entries',type=int)
+            p.add_argument('--cache-max-bytes',type=int)
+            p.add_argument('--cache-retention-days',type=int)
+        if name in ('audit','plan','status'):
+            p.add_argument('--format',choices=('json','text'),default='json')
         if name in ('status','transition'):
             p.add_argument('run_id')
         if name=='transition':
@@ -147,6 +157,12 @@ def main(argv=None):
         control.add_argument('--reason', required=True)
     a=parser.parse_args(argv)
     try:
+        if a.command=='doctor':
+            print(json.dumps(doctor(),indent=2,ensure_ascii=True))
+            return 0
+        if a.command=='discover':
+            print(json.dumps(discover(a.path),indent=2,ensure_ascii=True))
+            return 0
         repo=Repository(a.repository)
         if a.command in ('preview','apply'):
             patch, declarations, test=[repo.private_path(p) for p in (a.patch,a.declarations,a.acceptance)]
@@ -155,6 +171,15 @@ def main(argv=None):
         else:
             with Store(repo,a.database) as store:
                 if a.command in ('audit','plan'):
+                    cfg=load_config(repo,a.config)
+                    a.analysis_cpu=resolve(cfg,'analysis','cpu',a.analysis_cpu)
+                    a.analysis_memory=resolve(cfg,'analysis','memory',a.analysis_memory)
+                    a.analysis_budget=resolve(cfg,'analysis','budget',a.analysis_budget)
+                    a.max_blob=resolve(cfg,'budget','max_blob',a.max_blob)
+                    a.max_total=resolve(cfg,'budget','max_total',a.max_total)
+                    a.cache_max_entries=resolve(cfg,'cache','max_entries',a.cache_max_entries)
+                    a.cache_max_bytes=resolve(cfg,'cache','max_bytes',a.cache_max_bytes)
+                    a.cache_retention_days=resolve(cfg,'cache','retention_days',a.cache_retention_days)
                     if isolation_available():
                         analyser=isolated_analyser(repo.root,a.analysis_cpu,a.analysis_memory,budget_seconds=a.analysis_budget)
                         mode='isolated'
@@ -229,10 +254,34 @@ def main(argv=None):
                     output=store.view(a.run_id)
                 else:
                     output=store.transition(a.run_id,a.task_id,a.version,a.state,a.reason)
-        print(json.dumps(output,indent=2,ensure_ascii=True))
+        if getattr(a,'format','json')=='text':
+            sys.stdout.write(text_report(a.command,output))
+        else:
+            print(json.dumps(output,indent=2,ensure_ascii=True))
         return 0
     except (ValueError, OSError, KeyError, TypeError, sqlite3.Error, subprocess.SubprocessError) as exc:
-        parser.exit(2,f'Command blocked: {exc}\n')
+        _fail(parser,a,'blocked',f'Command blocked: {exc}',str(exc),2)
+    except Exception as exc:  # unexpected: exit 3 without leaking a traceback
+        if os.environ.get('OSB_DEBUG')=='1':
+            raise
+        _fail(parser,a,'internal',f'Internal error: {type(exc).__name__}: {exc}',f'{type(exc).__name__}: {exc}',3)
+
+
+def _fail(parser, a, kind, text, message, code):
+    if a.error_format=='json':
+        sys.stderr.write(json.dumps({'error':kind,'message':message,'exit':code})+'\n')
+        raise SystemExit(code)
+    parser.exit(code,text+'\n')
+
+
+def discover(path):
+    top=subprocess.run(['git','-C',str(path),'rev-parse','--show-toplevel'],capture_output=True,text=True,timeout=60)
+    if top.returncode!=0:
+        raise ValueError('not inside a Git repository')
+    repo=Repository(top.stdout.strip())
+    roots=sorted(repo.git('rev-list','--max-parents=0',repo.revision).decode().split())
+    return {'root':str(repo.root),'revision':repo.revision,'common_dir':str(repo.common),
+            'project_identity':identity(roots),'root_commits':roots}
 
 
 if __name__=='__main__':

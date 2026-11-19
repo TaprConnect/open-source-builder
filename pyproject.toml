@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "open-source-builder"
+version = "0.1.0"
+description = "Model-agnostic engineering runtime: isolated audit, persistent planning, guarded repair and verified completion"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+osb = "osb_engine.__main__:main"
+
+[tool.setuptools]
+packages = ["osb_engine"]

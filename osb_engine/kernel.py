@@ -8,6 +8,7 @@ The supervisor grants an explicit operation scope to one lease generation and
 calls dispatch immediately before each controlled mutation. Dispatch is an
 admission check plus audit record. It does not confine the worker afterwards.
 """
+import base64
 import hashlib
 import hmac
 import json
@@ -32,6 +33,7 @@ def _project(store):
 
 _EXTRA_TABLES = (
     """CREATE TABLE IF NOT EXISTS kernel_settings_v1 (project TEXT PRIMARY KEY, eol TEXT NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS kernel_journal_commits_v1 (op TEXT PRIMARY KEY)""",
     """CREATE TABLE IF NOT EXISTS kernel_quotas_v1 (project TEXT NOT NULL, run_id TEXT NOT NULL, task_id TEXT NOT NULL, kind TEXT NOT NULL, quota INTEGER NOT NULL, PRIMARY KEY(project, run_id, task_id, kind))""",
     """CREATE TABLE IF NOT EXISTS kernel_usage_v1 (seq INTEGER PRIMARY KEY, project TEXT NOT NULL, run_id TEXT NOT NULL, task_id TEXT NOT NULL, kind TEXT NOT NULL, time_ns INTEGER NOT NULL)""",
     """CREATE TABLE IF NOT EXISTS kernel_exclusions_v1 (project TEXT NOT NULL, prefix TEXT NOT NULL, PRIMARY KEY(project, prefix))""",
@@ -233,6 +235,91 @@ def policy(conn, project):
     return _eol(conn, project), tuple(r[0] for r in rows)
 
 
+def journal_path(store):
+    return store.conn.execute("PRAGMA database_list").fetchone()[2] + ".journal"
+
+
+def begin_journal(store, paths):
+    """Durably snapshot paths before a worktree change; returns the operation id."""
+    path = journal_path(store)
+    if os.path.exists(path):
+        raise ValueError("interrupted operation pending; run recover")
+    root, snapshot = str(store.repo.root), {}
+    for rel in paths:
+        full = os.path.join(root, *rel.split("/"))
+        try:
+            with open(full, "rb") as handle:
+                data = handle.read()
+            snapshot[rel] = {"data": base64.b64encode(data).decode("ascii"),
+                             "mode": os.stat(full).st_mode & 0o777}
+        except FileNotFoundError:
+            snapshot[rel] = None
+    op = secrets.token_hex(16)
+    tmp = path + ".new"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as handle:
+        json.dump({"op": op, "project": _project(store), "paths": snapshot}, handle)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(tmp, path)
+    if os.name == "posix":
+        dirfd = os.open(os.path.dirname(path), os.O_RDONLY)
+        try:
+            os.fsync(dirfd)
+        finally:
+            os.close(dirfd)
+    return op
+
+
+def commit_journal(conn, op):
+    conn.execute("INSERT INTO kernel_journal_commits_v1 VALUES (?)", (op,))
+
+
+def end_journal(store):
+    try:
+        os.unlink(journal_path(store))
+    except FileNotFoundError:
+        pass
+
+
+def _restore(root, snapshot):
+    for rel, entry in sorted(snapshot.items()):
+        full = os.path.join(root, *rel.split("/"))
+        if entry is None:
+            if os.path.lexists(full):
+                os.unlink(full)
+            continue
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        tmp = full + ".osb-restore"
+        with open(tmp, "wb") as handle:
+            handle.write(base64.b64decode(entry["data"]))
+        if os.name == "posix":
+            os.chmod(tmp, entry["mode"])
+        os.replace(tmp, full)
+
+
+def recover(store):
+    """Supervisor resolves an interrupted operation: adopt it if committed, else restore snapshots."""
+    conn, project = store.conn, _project(store)
+    with conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _schema(conn)
+        path = journal_path(store)
+        if not os.path.exists(path):
+            return {"recovered": False}
+        with open(path) as handle:
+            journal = json.load(handle)
+        if journal.get("project") != project:
+            raise ValueError("journal belongs to a different project")
+        committed = conn.execute("SELECT 1 FROM kernel_journal_commits_v1 WHERE op=?",
+                                 (journal["op"],)).fetchone() is not None
+        if not committed:
+            _restore(str(store.repo.root), journal["paths"])
+        os.unlink(path)
+    return {"recovered": True, "action": "adopted" if committed else "restored",
+            "paths": sorted(journal["paths"])}
+
+
 QUOTA_KINDS = ("mutate", "verify", "worker")
 
 
@@ -300,6 +387,8 @@ def configure(store, eol=None, exclude=(), clear_excludes=False):
 
 def integrity(store, conn):
     """Return out-of-band changes: unrecorded changed paths or ledger hash mismatches."""
+    if os.path.exists(journal_path(store)):
+        raise ValueError("interrupted operation pending; run recover")
     ledger = dict(conn.execute("SELECT path, current FROM kernel_ledger_v1 WHERE project=?",
                                (_project(store),)).fetchall())
     root = str(store.repo.root)

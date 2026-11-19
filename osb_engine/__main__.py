@@ -5,7 +5,7 @@ from pathlib import Path
 import sqlite3
 import subprocess
 import sys
-from .kernel import configure, dispatch, set_quota, grant, pause, renew, reserve, resume, revoke
+from .kernel import configure, dispatch, recover, set_quota, grant, pause, renew, reserve, resume, revoke
 from .completion import complete, depend, freeze, release, verify
 from .isolation import run_worker
 from .mutation import mutate
@@ -116,6 +116,9 @@ def main(argv=None):
         quota_parser.add_argument(field)
     quota_parser.add_argument('--kind', required=True)
     quota_parser.add_argument('--limit', type=int, required=True)
+    recover_parser = sub.add_parser('recover', description='Trusted supervisor only. Resolves an interrupted kernel operation.')
+    recover_parser.add_argument('repository')
+    recover_parser.add_argument('database')
     for command in ('pause', 'resume'):
         control = sub.add_parser(command, description="Trusted supervisor only.")
         control.add_argument('repository')
@@ -174,6 +177,8 @@ def main(argv=None):
                         raise ValueError('inputs must be NAME=PATH')
                     output = run_worker(store, a.run_id, a.task_id, a.generation, token,
                                         a.outbox, worker_argv, inputs, a.timeout)
+                elif a.command == 'recover':
+                    output = recover(store)
                 elif a.command == 'quota':
                     output = set_quota(store, a.run_id, a.task_id, a.kind, a.limit)
                 elif a.command == 'configure':

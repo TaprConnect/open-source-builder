@@ -13,6 +13,8 @@ import stat
 import subprocess
 import time
 
+from .kernel import begin_journal, commit_journal
+from .kernel import end_journal as _end_journal
 from .kernel import (_live, consume, policy, _path, _paused, _project, _schema, covered, digest,
                      granted_scope, integrity, worktree_changes)
 
@@ -117,6 +119,7 @@ def mutate(store, run_id, task_id, generation, token, patch):
             repo.git("apply", "--check", "--whitespace=nowarn", "-", data=patch)
         except subprocess.CalledProcessError as exc:
             raise ValueError("patch does not apply cleanly") from exc
+        op = begin_journal(store, changes)
         _apply(repo, patch)
         try:
             repo.assert_current()
@@ -132,7 +135,8 @@ def mutate(store, run_id, task_id, generation, token, patch):
             try:
                 _apply(repo, patch, reverse=True)
             except subprocess.CalledProcessError:
-                raise ValueError("post-apply check failed and revert failed; supervisor recovery required") from exc
+                raise ValueError("post-apply check failed and revert failed; run recover") from exc
+            _end_journal(store)
             raise ValueError(f"post-apply check failed; patch reverted: {exc}") from exc
         after = {p: digest(root, p) for p in changes}
         for path in changes:
@@ -154,5 +158,7 @@ def mutate(store, run_id, task_id, generation, token, patch):
             INSERT INTO kernel_patches_v1 (dispatch, project, run_id, task_id, generation, patch, paths)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (seq, project, run_id, task_id, generation, patch, json.dumps(sorted(changes))))
+        commit_journal(conn, op)
+    _end_journal(store)
     return {"applied": True, "dispatch": seq, "run_id": run_id, "task_id": task_id,
             "generation": generation, "revision": plan["revision"], "operation": operation}

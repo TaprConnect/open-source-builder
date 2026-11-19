@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 import time
 
+from .kernel import begin_journal, commit_journal, end_journal
 from .kernel import (_live, _paused, consume, _project, _reason, _schema, completed, digest,
                      integrity)
 from .isolation import run_isolated
@@ -192,6 +193,8 @@ def release(store, run_id, task_id, generation, reason, revert=False):
                                (project, run_id, task_id)).fetchall()
         if patches and not revert:
             raise ValueError("revert this task's applied patches before release")
+        touched = sorted({p for _, _, paths in patches for p in json.loads(paths)})
+        op = begin_journal(store, touched) if patches else None
         undone = []
         try:
             for _, patch, _ in patches:
@@ -200,6 +203,7 @@ def release(store, run_id, task_id, generation, reason, revert=False):
         except subprocess.CalledProcessError as exc:
             for patch in reversed(undone):
                 _apply(repo, patch)
+            end_journal(store)
             raise ValueError("revert failed; worktree restored") from exc
         for dispatch, _, paths in patches:
             for path in json.loads(paths):
@@ -209,5 +213,8 @@ def release(store, run_id, task_id, generation, reason, revert=False):
         conn.execute("INSERT INTO kernel_releases_v1 VALUES (?, ?, ?, ?, ?)",
                      (project, generation, run_id, task_id, reason))
         conn.execute("UPDATE kernel_reservations_v1 SET expires_ns=0 WHERE project=?", (project,))
+        if op:
+            commit_journal(conn, op)
+    end_journal(store)
     return {"released": True, "run_id": run_id, "task_id": task_id, "generation": generation,
             "reverted_patches": len(patches)}

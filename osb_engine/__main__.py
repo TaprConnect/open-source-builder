@@ -1,6 +1,8 @@
 """Command line entry point for the local audit and guarded repair pilot."""
 import argparse
 import json
+import time
+from datetime import datetime, timezone
 import os
 from pathlib import Path
 import sqlite3
@@ -22,7 +24,46 @@ from .controls import catalogue
 from .repair import check_patch, apply_prepared
 
 
+_EVENT = {}
+
+
 def main(argv=None):
+    """CLI entry point; with --log FILE appends one JSON line per command (F01-OPS)."""
+    argv = list(sys.argv[1:] if argv is None else argv)
+    log = None
+    if '--log' in argv[:argv.index('run-worker') if 'run-worker' in argv else len(argv)]:
+        at = argv.index('--log')
+        log = argv[at + 1] if at + 1 < len(argv) else None
+    started, code = time.monotonic(), 0
+    _EVENT.clear()
+    try:
+        code = _main(argv)
+    except SystemExit as exc:
+        code = exc.code if isinstance(exc.code, int) else 2
+        raise
+    finally:
+        if log:
+            _append_log(log, {'time': datetime.now(timezone.utc).isoformat(), 'command': _EVENT.get('command'),
+                              'exit': code, 'duration_ms': int((time.monotonic() - started) * 1000),
+                              **{k: v for k, v in _EVENT.items() if k != 'command'}})
+    return code
+
+
+def _append_log(path, event):
+    """Log only metadata; the directory must be owner-only (and outside any target, checked in _main)."""
+    target = Path(path).absolute()
+    if os.name == 'posix' and target.parent.stat().st_mode & 0o077:
+        raise SystemExit('log directory must be owner-only (chmod 700)')
+    if os.name == 'nt':
+        from .winacl import unexpected_principals
+        if unexpected_principals(target.parent):
+            raise SystemExit('log directory ACL grants access beyond the owner')
+    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    with os.fdopen(fd, 'a') as handle:
+        handle.write(json.dumps(event, sort_keys=True) + '\n')
+
+
+def _main(argv):
     argv = list(sys.argv[1:] if argv is None else argv)
     worker_argv = []
     if 'run-worker' in argv and '--' in argv[argv.index('run-worker'):]:
@@ -30,6 +71,7 @@ def main(argv=None):
         argv, worker_argv = argv[:split], argv[split + 1:]
     parser=argparse.ArgumentParser(prog='osb',description=__doc__)
     parser.add_argument('--error-format',choices=('text','json'),default='text')
+    parser.add_argument('--log',help='append one JSON metadata line per command to this private file')
     sub=parser.add_subparsers(dest='command',required=True)
     sub.add_parser('doctor',description='Report host capabilities and support classification.')
     discover_parser=sub.add_parser('discover',description='Resolve a path inside a repository to its root, revision and identity.')
@@ -168,6 +210,7 @@ def main(argv=None):
         control.add_argument('database')
         control.add_argument('--reason', required=True)
     a=parser.parse_args(argv)
+    _EVENT['command']=a.command
     try:
         if a.command=='doctor':
             print(json.dumps(doctor(),indent=2,ensure_ascii=True))
@@ -176,6 +219,8 @@ def main(argv=None):
             print(json.dumps(discover(a.path),indent=2,ensure_ascii=True))
             return 0
         repo=Repository(a.repository)
+        if a.log:
+            repo.private_path(a.log)
         if a.command in ('preview','apply'):
             patch, declarations, test=[repo.private_path(p) for p in (a.patch,a.declarations,a.acceptance)]
             args=(repo,patch.read_bytes(),json.loads(declarations.read_bytes()),test.read_bytes())
@@ -274,6 +319,12 @@ def main(argv=None):
                     output=store.view(a.run_id)
                 else:
                     output=store.transition(a.run_id,a.task_id,a.version,a.state,a.reason)
+        if isinstance(output,dict):
+            if output.get('run_id'):
+                _EVENT['run_id']=output['run_id']
+            report=output.get('report') if isinstance(output.get('report'),dict) else {}
+            _EVENT['counts']={'files':len(report.get('files',[])),'findings':len(report.get('findings',[])),
+                              'tasks':len(output.get('tasks',[]))}
         if getattr(a,'format','json')=='text':
             sys.stdout.write(text_report(a.command,output))
         else:

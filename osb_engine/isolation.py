@@ -34,9 +34,12 @@ def available():
         _PROBE = False
         if sys.platform.startswith("linux") and shutil.which("bwrap") is not None:
             try:
-                _PROBE = subprocess.run(["bwrap", "--unshare-all", "--die-with-parent", "--ro-bind", "/usr", "/usr",
-                                         "--symlink", "usr/bin", "/bin", "--", "/usr/bin/true"],
-                                        capture_output=True, timeout=20, stdin=subprocess.DEVNULL).returncode == 0
+                import tempfile
+                with tempfile.TemporaryDirectory() as probe_root:
+                    # Same command builder as real runs, so a pass proves the real configuration.
+                    _PROBE = subprocess.run(_command(probe_root, None, {}, ["/usr/bin/true"]),
+                                            capture_output=True, timeout=20, stdin=subprocess.DEVNULL,
+                                            env={"PATH": "/usr/bin:/bin"}).returncode == 0
             except (OSError, subprocess.SubprocessError):
                 _PROBE = False
     return _PROBE

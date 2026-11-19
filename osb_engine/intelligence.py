@@ -113,6 +113,8 @@ _ALTERNATIVE_DISTS = {"psycopg2": ("psycopg2-binary",), "psycopg": ("psycopg-bin
                       "PIL": ("pillow-simd",), "yaml": ("ruamel.yaml",), "jose": ("python-jose-cryptodome",),
                       "Crypto": ("pycryptodome", "pycryptodomex", "pycrypto"), "MySQLdb": ("mysqlclient", "mysql-python"),
                       "jwt": ("pyjwt",), "serial": ("pyserial",), "magic": ("python-magic", "python-magic-bin")}
+# Calls that verify a presented credential or signature are authentication evidence.
+_VERIFYING = __import__("re").compile(r"(check_password|verify_password|checkpw|compare_digest)$|verify_")
 _CREDENTIAL_ISSUING = {"login_user", "logout_user", "set_password", "hash_password", "generate_password_hash",
                        "create_access_token", "create_refresh_token", "make_password"}
 
@@ -305,8 +307,8 @@ def build_index(repo, extractor=None):
         infos = [by_path[p]["functions"][n] for p, n in reach]
         calls = {c for i in infos for c in i["calls"]}
         mutates = {m for i in infos for m in i["mutates"]}
-        auth = "detected" if any(_AUTH.search(x) for i in infos for x in i["decorators"] + i["calls"]
-                                 if x not in _CREDENTIAL_ISSUING) else "not_detected"
+        auth = "detected" if any((_AUTH.search(x) and x not in _CREDENTIAL_ISSUING) or _VERIFYING.match(x)
+                                 for i in infos for x in i["decorators"] + i["calls"]) else "not_detected"
         flags = []
         if any(i["function"] == route["function"] and i["kind"] in ("placeholder", "not_implemented")
                for i in facts.get("issues", [])):

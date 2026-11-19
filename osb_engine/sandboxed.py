@@ -34,7 +34,7 @@ _TEXT, _OPTIONAL_TEXT, _COUNT = "text", "optional text", "count"
 _SCHEMAS = {
     "symbols": {"name": _TEXT, "kind": _TEXT, "line": _COUNT, "end": _COUNT},
     "imports": {"module": _TEXT, "name": _OPTIONAL_TEXT, "alias": _OPTIONAL_TEXT, "level": _COUNT, "line": _COUNT},
-    "calls": {"caller": _TEXT, "target": _TEXT, "line": _COUNT, "resolution": ("unresolved",)},
+    "calls": {"caller": _TEXT, "target": _OPTIONAL_TEXT, "line": _COUNT, "resolution": ("unresolved",)},
     "findings": {"rule": _TEXT, "line": _COUNT, "state": ("candidate",), "explanation": _TEXT},
 }
 

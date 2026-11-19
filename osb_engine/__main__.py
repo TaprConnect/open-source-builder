@@ -13,6 +13,7 @@ from .sandboxed import isolated_analyser
 from .mutation import mutate
 from .config import load as load_config, resolve
 from .doctor import doctor, text_report
+from .handover import export_plan, import_plan
 from .repository import Repository
 from .store import identity
 from .store import Store
@@ -41,6 +42,7 @@ def main(argv=None):
         if name in ('audit','plan'):
             p.add_argument('--catalogue',default=str(Path(__file__).resolve().parent.parent/'profiles'/'checks.tsv'))
             p.add_argument('--config',help='private versioned JSON configuration outside the target')
+            p.add_argument('--working-tree',action='store_true',help='analyse uncommitted files (audit only; never cached or planned)')
             p.add_argument('--max-blob',type=int)
             p.add_argument('--max-total',type=int)
             p.add_argument('--analysis-cpu',type=int)
@@ -150,6 +152,16 @@ def main(argv=None):
     cache_parser = sub.add_parser('cache-clear', description='Trusted supervisor only. Empties the analysis cache.')
     cache_parser.add_argument('repository')
     cache_parser.add_argument('database')
+    cancel_parser = sub.add_parser('cancel', description='Trusted supervisor only. Cancels a task (terminal).')
+    for field in ('repository', 'database', 'run_id', 'task_id'):
+        cancel_parser.add_argument(field)
+    cancel_parser.add_argument('--reason', required=True)
+    export_parser = sub.add_parser('export-plan', description='Write a sealed handover bundle for a plan.')
+    for field in ('repository', 'database', 'run_id', 'bundle'):
+        export_parser.add_argument(field)
+    import_parser = sub.add_parser('import-plan', description='Recreate a plan from a sealed handover bundle.')
+    for field in ('repository', 'database', 'bundle'):
+        import_parser.add_argument(field)
     for command in ('pause', 'resume'):
         control = sub.add_parser(command, description="Trusted supervisor only.")
         control.add_argument('repository')
@@ -192,8 +204,10 @@ def main(argv=None):
                     context={'trust':mode}
                     if mode=='isolated':
                         context.update(cpu=a.analysis_cpu,memory=a.analysis_memory)
+                    if a.working_tree and a.command=='plan':
+                        raise ValueError('plans bind to a committed revision; commit first or use audit --working-tree')
                     report,metrics=scan(repo,store,catalogue(a.catalogue),a.max_blob,a.max_total,analyser,context,
-                                        (a.cache_max_entries,a.cache_max_bytes,a.cache_retention_days))
+                                        (a.cache_max_entries,a.cache_max_bytes,a.cache_retention_days),a.working_tree)
                     output={'report':report,'metrics':{**metrics,'analysis':mode}}
                     if a.command=='plan':
                         output['run_id']=store.save(report)
@@ -236,6 +250,12 @@ def main(argv=None):
                         raise ValueError('inputs must be NAME=PATH')
                     output = run_worker(store, a.run_id, a.task_id, a.generation, token,
                                         a.outbox, worker_argv, inputs, a.timeout)
+                elif a.command == 'cancel':
+                    output = store.cancel(a.run_id, a.task_id, a.reason)
+                elif a.command == 'export-plan':
+                    output = export_plan(store, a.run_id, a.bundle)
+                elif a.command == 'import-plan':
+                    output = import_plan(store, a.bundle)
                 elif a.command == 'cache-clear':
                     output = store.cache_clear()
                 elif a.command == 'recover':

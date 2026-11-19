@@ -7,6 +7,8 @@ import sqlite3
 import stat
 import time
 
+SCHEMA_VERSION = 2
+
 
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=True, allow_nan=False)
@@ -59,6 +61,32 @@ class Store:
             previous TEXT NOT NULL, next TEXT NOT NULL, reason TEXT NOT NULL,
             FOREIGN KEY(run_id, task_id) REFERENCES engine_tasks(run_id,id));
         ''')
+        self._migrate()
+
+    def _migrate(self):
+        """Ordered, transactional schema migrations (F01-PLAN). Newer stores are refused."""
+        version = self.conn.execute('PRAGMA user_version').fetchone()[0]
+        if version > SCHEMA_VERSION:
+            raise ValueError(f'store schema {version} is newer than this runtime supports ({SCHEMA_VERSION})')
+        if version < 2:
+            self.conn.execute('PRAGMA foreign_keys=OFF')
+            try:
+                with self.conn:
+                    self.conn.execute('BEGIN IMMEDIATE')
+                    self.conn.execute('''CREATE TABLE engine_tasks_v2 (
+                        run_id TEXT NOT NULL REFERENCES engine_runs(id), id TEXT NOT NULL, payload TEXT NOT NULL,
+                        state TEXT NOT NULL CHECK(state IN ('open','investigating','blocked','proposed','cancelled')),
+                        version INTEGER NOT NULL DEFAULT 0, reason TEXT NOT NULL DEFAULT '',
+                        fingerprint TEXT NOT NULL DEFAULT '', PRIMARY KEY(run_id,id))''')
+                    rows = self.conn.execute('SELECT run_id,id,payload,state,version,reason FROM engine_tasks').fetchall()
+                    self.conn.executemany('INSERT INTO engine_tasks_v2 VALUES (?,?,?,?,?,?,?)',
+                                          [(*r, json.loads(r[2]).get('fingerprint', '')) for r in rows])
+                    self.conn.execute('DROP TABLE engine_tasks')
+                    self.conn.execute('ALTER TABLE engine_tasks_v2 RENAME TO engine_tasks')
+                    self.conn.execute('CREATE TABLE IF NOT EXISTS engine_supersessions (run_id TEXT PRIMARY KEY, superseded_by TEXT NOT NULL)')
+                    self.conn.execute('PRAGMA user_version=2')
+            finally:
+                self.conn.execute('PRAGMA foreign_keys=ON')
 
     def __enter__(self):
         return self
@@ -126,13 +154,37 @@ class Store:
         return {'cleared': True}
 
     def save(self, report):
+        if report.get('scope', 'committed') != 'committed':
+            raise ValueError('only committed-revision reports can become plans')
         key = identity([str(self.repo.root), report])
         with self.conn:
+            self.conn.execute('BEGIN IMMEDIATE')
             self.conn.execute('INSERT OR IGNORE INTO engine_runs VALUES (?,?,?,?)',
                               (key, str(self.repo.root), report['revision'], canonical(report)))
-            self.conn.executemany('INSERT OR IGNORE INTO engine_tasks(run_id,id,payload,state) VALUES (?,?,?,\'open\')',
-                                  [(key, f['id'], canonical(f)) for f in report['findings']])
+            self.conn.executemany('INSERT OR IGNORE INTO engine_tasks(run_id,id,payload,state,fingerprint) VALUES (?,?,?,\'open\',?)',
+                                  [(key, f['id'], canonical(f), f.get('fingerprint', '')) for f in report['findings']])
+            if report['revision'] == self.repo.head():
+                self.conn.execute('''INSERT OR IGNORE INTO engine_supersessions
+                    SELECT id, ? FROM engine_runs WHERE repository=? AND id!=? AND revision!=?''',
+                                  (key, str(self.repo.root), key, report['revision']))
         return key
+
+    def cancel(self, key, task, reason):
+        """Supervisor cancels a task: terminal, refused while a live kernel lease holds it."""
+        if not reason.strip() or len(reason) > 4000:
+            raise ValueError('nonempty bounded reason required')
+        with self.conn:
+            self.conn.execute('BEGIN IMMEDIATE')
+            self.view(key)
+            row = self.conn.execute('SELECT state FROM engine_tasks WHERE run_id=? AND id=?', (key, task)).fetchone()
+            if not row or row[0] not in ('open', 'investigating', 'blocked'):
+                raise ValueError('only open, investigating or blocked tasks can be cancelled')
+            from .kernel import holds_live_lease
+            if holds_live_lease(self, key, task):
+                raise ValueError('task is held by a live reservation; release it first')
+            self.conn.execute("UPDATE engine_tasks SET state='cancelled',version=version+1,reason=? WHERE run_id=? AND id=?", (reason, key, task))
+            self.conn.execute('INSERT INTO engine_events(run_id,task_id,previous,next,reason) VALUES (?,?,?,?,?)', (key, task, row[0], 'cancelled', reason))
+        return self.view(key)
 
     def view(self, key):
         row = self.conn.execute('SELECT revision,report FROM engine_runs WHERE id=? AND repository=?', (key, str(self.repo.root))).fetchone()
@@ -141,14 +193,15 @@ class Store:
         report = json.loads(row[1])
         if identity([str(self.repo.root), report]) != key or report['revision'] != row[0]:
             raise ValueError('stored report integrity mismatch')
-        tasks = [dict(id=i, finding=json.loads(p), state=s, version=v, reason=r) for i,p,s,v,r in self.conn.execute(
-            'SELECT id,payload,state,version,reason FROM engine_tasks WHERE run_id=? ORDER BY id', (key,))]
-        return dict(run_id=key, revision=row[0], stale=self.repo.head()!=row[0], tasks=tasks,
-                    report=report, release_ready=False)
+        tasks = [dict(id=i, finding=json.loads(p), state=s, version=v, reason=r, fingerprint=f) for i,p,s,v,r,f in self.conn.execute(
+            'SELECT id,payload,state,version,reason,fingerprint FROM engine_tasks WHERE run_id=? ORDER BY id', (key,))]
+        later = self.conn.execute('SELECT superseded_by FROM engine_supersessions WHERE run_id=?', (key,)).fetchone()
+        return dict(run_id=key, revision=row[0], stale=self.repo.head()!=row[0], superseded_by=later[0] if later else None,
+                    tasks=tasks, report=report, release_ready=False)
 
     def transition(self, key, task, version, state, reason):
         allowed = {'open': {'investigating','blocked'}, 'investigating': {'blocked','proposed','open'},
-                   'blocked': {'open','investigating'}, 'proposed': {'open','blocked'}}
+                   'blocked': {'open','investigating'}, 'proposed': {'open','blocked'}, 'cancelled': set()}
         if not reason.strip() or len(reason) > 4000:
             raise ValueError('nonempty bounded reason required')
         with self.conn:

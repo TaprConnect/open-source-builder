@@ -33,7 +33,7 @@ def valid_facts(result):
     facts = result.get("facts", {})
     if not isinstance(facts, dict):
         return False
-    known = {"definitions", "imports", "references", "exports", "main_guard", "keys", "tables"}
+    known = {"definitions", "imports", "references", "exports", "main_guard", "keys", "tables", "dependencies"}
     if set(facts) - known:
         return False
     for d in facts.get("definitions", []):
@@ -47,9 +47,28 @@ def valid_facts(result):
     for t in facts.get("tables", []):
         if not (isinstance(t, dict) and set(t) == {"name", "columns"} and _text(t["name"]) and _texts(t["columns"])):
             return False
-    if any(k in facts and not _texts(facts[k], 2_000_000) for k in ("references", "exports", "keys")):
+    if any(k in facts and not _texts(facts[k], 2_000_000) for k in ("references", "exports", "keys", "dependencies")):
         return False
     return "main_guard" not in facts or isinstance(facts["main_guard"], bool)
+
+
+# Import names that differ from their distribution names (documented heuristic).
+_IMPORT_TO_DIST = {"yaml": "pyyaml", "PIL": "pillow", "sklearn": "scikit-learn", "cv2": "opencv-python",
+                   "bs4": "beautifulsoup4", "dateutil": "python-dateutil", "jwt": "pyjwt", "google": "protobuf",
+                   "attr": "attrs", "dotenv": "python-dotenv", "magic": "python-magic", "OpenSSL": "pyopenssl"}
+
+
+def _normalise(name):
+    return __import__("re").sub(r"[-_.]+", "-", name).lower()
+
+
+def _classify(root, declared):
+    import sys
+    if root in sys.stdlib_module_names:
+        return "stdlib"
+    if _normalise(root) in declared or _normalise(_IMPORT_TO_DIST.get(root, root)) in declared:
+        return "declared"
+    return "undeclared"
 
 
 def _module_name(path):
@@ -141,7 +160,9 @@ def build_index(repo, extractor=None):
         if kind == "python" and entry["state"] == "SYMBOL_INDEXED":
             modules[_module_name(blob.path)] = blob.path
         files.append(entry)
+    declared = {_normalise(d) for f in files for d in f.get("facts", {}).get("dependencies", [])}
     edges, external, resolved, total = set(), set(), 0, 0
+    classified, missing = {}, {}
     for entry in files:
         if entry["language"] != "python" or entry["state"] != "SYMBOL_INDEXED":
             continue
@@ -153,8 +174,13 @@ def build_index(repo, extractor=None):
                 resolved += 1
                 edges.update((entry["path"], t) for t in targets if t != entry["path"])
             elif root:
-                resolved += 1
                 external.add(root)
+                classified[root] = _classify(root, declared)
+                if classified[root] == "undeclared":
+                    missing.setdefault(root, set()).add(entry["path"])
+                    unresolved += 1
+                else:
+                    resolved += 1
             else:
                 unresolved += 1
         if unresolved == 0:
@@ -185,7 +211,8 @@ def build_index(repo, extractor=None):
         states[f["state"]] = states.get(f["state"], 0) + 1
     return {"schema": 1, "revision": repo.revision, "files": files,
             "graph": {"edges": sorted([a, b] for a, b in edges), "cycles": _cycles(set(modules.values()), edges),
-                      "external": sorted(external)},
+                      "external": sorted(external), "external_classified": dict(sorted(classified.items()))},
+            "missing_dependencies": [{"module": m, "files": sorted(fs)} for m, fs in sorted(missing.items())],
             "entry_points": entry_points, "dead_code_candidates": dead,
             "summary": {"states": dict(sorted(states.items())), "imports": total,
                         "resolution_rate": round(resolved / total, 4) if total else 1.0},

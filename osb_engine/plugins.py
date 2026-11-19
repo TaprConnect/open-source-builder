@@ -66,6 +66,43 @@ def _toml(data):
     return {"state": "SYMBOL_INDEXED", "facts": {"keys": sorted(value)[:_LIMIT]}}
 
 
+_NAME = __import__("re").compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)")
+
+
+def _names(requirements):
+    out = []
+    for item in requirements:
+        match = _NAME.match(item) if isinstance(item, str) else None
+        if match:
+            out.append(match.group(1))
+    return sorted(set(out))[:_LIMIT]
+
+
+def _pyproject(data):
+    result = _toml(data)
+    if result["state"] != "SYMBOL_INDEXED":
+        return result
+    import tomllib
+    project = tomllib.loads(data.decode("utf-8")).get("project", {})
+    declared = list(project.get("dependencies", []) if isinstance(project.get("dependencies"), list) else [])
+    optional = project.get("optional-dependencies", {})
+    if isinstance(optional, dict):
+        for group in optional.values():
+            declared += group if isinstance(group, list) else []
+    result["facts"]["dependencies"] = _names(declared)
+    return result
+
+
+def _requirements(data):
+    try:
+        lines = data.decode("utf-8").splitlines()
+    except UnicodeDecodeError as exc:
+        return {"state": "INDEXED", "error": f"undecodable requirements file: {exc}"[:300]}
+    entries = [line.split("#", 1)[0].strip() for line in lines]
+    names = _names([e for e in entries if e and not e.startswith("-")])
+    return {"state": "SYMBOL_INDEXED" if names else "PARSED", "facts": {"dependencies": names}}
+
+
 _ALLOWED_SQL = {sqlite3.SQLITE_CREATE_TABLE, sqlite3.SQLITE_CREATE_INDEX, sqlite3.SQLITE_CREATE_VIEW,
                 sqlite3.SQLITE_INSERT, sqlite3.SQLITE_UPDATE, sqlite3.SQLITE_READ, sqlite3.SQLITE_SELECT,
                 sqlite3.SQLITE_FUNCTION, sqlite3.SQLITE_TRANSACTION}
@@ -89,12 +126,18 @@ def _sql(data):
         conn.close()
 
 
-PLUGINS = {"python": _python, "json": _json, "toml": _toml, "sql": _sql}
+PLUGINS = {"python": _python, "json": _json, "toml": _toml, "sql": _sql, "pyproject": _pyproject,
+           "requirements": _requirements}
 EXTENSIONS = {".py": "python", ".json": "json", ".toml": "toml", ".sql": "sql",
               ".ts": "typescript", ".tsx": "typescript", ".js": "javascript", ".jsx": "javascript", ".mjs": "javascript"}
 
 
 def language(path):
+    base = path.rsplit("/", 1)[-1].lower()
+    if base == "pyproject.toml":
+        return "pyproject"
+    if base.startswith("requirements") and base.endswith(".txt"):
+        return "requirements"
     for suffix, name in EXTENSIONS.items():
         if path.lower().endswith(suffix):
             return name

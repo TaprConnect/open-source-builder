@@ -57,8 +57,8 @@ def valid_facts(result):
     if not isinstance(functions, dict) or len(functions) > _ITEMS_MAX:
         return False
     for name, info in functions.items():
-        if not (_text(name) and isinstance(info, dict) and set(info) == {"calls", "mutates"}
-                and _texts(info["calls"], 500) and _texts(info["mutates"], 100)):
+        if not (_text(name) and isinstance(info, dict) and set(info) == {"calls", "mutates", "decorators"}
+                and _texts(info["calls"], 500) and _texts(info["mutates"], 100) and _texts(info["decorators"], 100)):
             return False
     for t in facts.get("tables", []):
         if not (isinstance(t, dict) and set(t) == {"name", "columns"} and _text(t["name"]) and _texts(t["columns"])):
@@ -87,6 +87,7 @@ def _classify(root, declared):
     return "undeclared"
 
 
+_AUTH = __import__("re").compile(r"login|auth|permission|role|jwt|admin", __import__("re").I)
 _PERSISTENCE = {"execute", "executemany", "commit", "add", "add_all", "save", "insert", "insert_one", "insert_many",
                 "update_one", "put_item", "bulk_write", "connect"}
 
@@ -241,19 +242,29 @@ def build_index(repo, extractor=None):
                       and f["path"] not in tests)
     dead = [d for d in dead if not (is_test(d["path"]) and (d["symbol"].startswith("test") or d["symbol"].startswith("Test")))]
     by_path = {f["path"]: f["facts"] for f in python}
+    imports_of = {}
+    for a, b in sorted(edges):
+        imports_of.setdefault(a, []).append(b)
     completeness = []
     for route in routes:
         facts = by_path.get(route["file"], {})
-        functions = facts.get("functions", {})
-        reach, frontier = set(), [route["function"]]
-        while frontier:
-            name = frontier.pop()
-            if name in reach or name not in functions:
+        reach, frontier = set(), [(route["file"], route["function"])]
+        while frontier and len(reach) < 2000:
+            node = frontier.pop()
+            path, name = node
+            info = by_path.get(path, {}).get("functions", {}).get(name)
+            if node in reach or info is None:
                 continue
-            reach.add(name)
-            frontier += [c for c in functions[name]["calls"] if c in functions]
-        calls = {c for n in reach for c in functions[n]["calls"]}
-        mutates = {m for n in reach for m in functions[n]["mutates"]}
+            reach.add(node)
+            for call in info["calls"]:
+                for candidate in [path] + imports_of.get(path, []):
+                    if call in by_path.get(candidate, {}).get("functions", {}):
+                        frontier.append((candidate, call))
+                        break
+        infos = [by_path[p]["functions"][n] for p, n in reach]
+        calls = {c for i in infos for c in i["calls"]}
+        mutates = {m for i in infos for m in i["mutates"]}
+        auth = "detected" if any(_AUTH.search(x) for i in infos for x in i["decorators"] + i["calls"]) else "not_detected"
         flags = []
         if any(i["function"] == route["function"] and i["kind"] in ("placeholder", "not_implemented")
                for i in facts.get("issues", [])):
@@ -263,7 +274,7 @@ def build_index(repo, extractor=None):
         if route["file"] not in tests:
             flags.append("untested")
         completeness.append({"path": route["path"], "methods": route["methods"], "handler": route["function"],
-                             "file": route["file"], "flags": flags,
+                             "file": route["file"], "flags": flags, "auth": auth,
                              "evidence": {"persistence_calls": sorted(calls & _PERSISTENCE), "mutated_state": sorted(mutates)}})
     for f in files:
         facts = f.get("facts", {})
@@ -279,6 +290,10 @@ def build_index(repo, extractor=None):
             "entry_points": entry_points, "dead_code_candidates": dead,
             "routes": sorted(routes, key=lambda r: (r["file"], r["line"], r["path"])),
             "completeness": sorted(completeness, key=lambda c: (c["file"], c["path"], c["methods"])),
+            "completeness_summary": {"routes": len(completeness),
+                                     "flagged": sum(1 for c in completeness if c["flags"]),
+                                     "auth_not_detected": sum(1 for c in completeness if c["auth"] == "not_detected"),
+                                     "frontend_analysis": "unsupported: no TypeScript/JavaScript parser available, so UI-to-API links are not analysed"},
             "environment": {k: sorted(set(v)) for k, v in sorted(environment.items())},
             "issues": sorted(issues, key=lambda i: (i["path"], i["line"], i["kind"])),
             "tests": {k: sorted(v) for k, v in sorted(tests.items())}, "untested_sources": untested,

@@ -104,7 +104,15 @@ def _functions(tree):
                         mutates.add(target.value.id)
                     elif isinstance(target, ast.Name) and target.id in declared_global:
                         mutates.add(target.id)
-        out[node.name] = {"calls": sorted(calls)[:500], "mutates": sorted(mutates)[:100]}
+        decorators = set()
+        for dec in node.decorator_list:
+            target = dec.func if isinstance(dec, ast.Call) else dec
+            if isinstance(target, ast.Name):
+                decorators.add(target.id)
+            elif isinstance(target, ast.Attribute):
+                decorators.add(target.attr)
+        out[node.name] = {"calls": sorted(calls)[:500], "mutates": sorted(mutates)[:100],
+                          "decorators": sorted(decorators)[:100]}
     return out
 
 

@@ -37,9 +37,13 @@ def available():
                 import tempfile
                 with tempfile.TemporaryDirectory() as probe_root:
                     # Same command builder as real runs, so a pass proves the real configuration.
-                    _PROBE = subprocess.run(_command(probe_root, None, {}, ["/usr/bin/true"]),
+                    _PROBE = subprocess.run(_command(probe_root, None, {}, ["prlimit", "--cpu=5", "--",
+                                                                           "python3", "-I", "-c", "pass"]),
                                             capture_output=True, timeout=20, stdin=subprocess.DEVNULL,
                                             env={"PATH": "/usr/bin:/bin"}).returncode == 0
+            except subprocess.TimeoutExpired:
+                _PROBE = None  # transient: do not pin a negative result
+                return False
             except (OSError, subprocess.SubprocessError):
                 _PROBE = False
     return _PROBE
@@ -70,6 +74,67 @@ def _command(root, outbox, inputs, argv, env=None):
                   "/usr/bin:/bin", "--", *argv]
 
 
+_HARD_CAP = 16 * 1024 * 1024
+
+
+def _bounded_run(cmd, timeout, stdin_data=b"", cap=_HARD_CAP):
+    """Run cmd streaming its output; kill it if stdout or stderr exceeds cap or time runs out.
+
+    Returns (code, stdout, stderr) with code -1 on timeout and -2 on output overflow. The
+    supervisor never buffers more than cap + one read per stream."""
+    import threading
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            env={"PATH": "/usr/bin:/bin"}, start_new_session=True)
+    overflow = threading.Event()
+    buffers = {"out": [], "err": []}
+
+    def drain(stream, key):
+        total = 0
+        while True:
+            chunk = stream.read(65536)
+            if not chunk:
+                return
+            total += len(chunk)
+            if total > cap:
+                overflow.set()
+                proc.kill()
+                return
+            buffers[key].append(chunk)
+
+    def feed():
+        try:
+            if stdin_data:
+                proc.stdin.write(stdin_data)
+        except (BrokenPipeError, OSError):
+            pass
+        finally:
+            try:
+                proc.stdin.close()
+            except OSError:
+                pass
+
+    threads = [threading.Thread(target=drain, args=(proc.stdout, "out"), daemon=True),
+               threading.Thread(target=drain, args=(proc.stderr, "err"), daemon=True),
+               threading.Thread(target=feed, daemon=True)]
+    for thread in threads:
+        thread.start()
+    timed_out = False
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        proc.kill()
+        proc.wait()
+    for thread in threads:
+        thread.join(timeout=5)
+    out, err = b"".join(buffers["out"]), b"".join(buffers["err"])
+    if overflow.is_set():
+        return -2, b"", b"output limit exceeded"
+    if timed_out:
+        return -1, b"", b"timeout"
+    return proc.returncode, out, err
+
+
 def run_isolated(root, argv, inputs, timeout, env=None, stdin_data=b"", limits=None, max_output=None):
     """Run argv with the checkout read-only and no writable host path; return (code, stdout, stderr)."""
     if not available():
@@ -79,16 +144,11 @@ def run_isolated(root, argv, inputs, timeout, env=None, stdin_data=b"", limits=N
         cpu, memory_mib = limits
         argv = ["prlimit", f"--cpu={int(cpu)}", f"--as={int(memory_mib) * 1024 * 1024}",
                 "--nofile=64", "--nproc=64", "--"] + argv
-    try:
-        result = subprocess.run(_command(root, None, inputs, argv, env), capture_output=True,
-                                timeout=timeout, env={"PATH": "/usr/bin:/bin"}, input=stdin_data)
-        if max_output is None:
-            return result.returncode, result.stdout[-_MAX_OUTPUT:], result.stderr[-_MAX_OUTPUT:]
-        if len(result.stdout) > max_output:
-            return -2, b"", b"output limit exceeded"
-        return result.returncode, result.stdout, result.stderr[-_MAX_OUTPUT:]
-    except subprocess.TimeoutExpired:
-        return -1, b"", b"timeout"
+    code, out, err = _bounded_run(_command(root, None, inputs, argv, env), timeout, stdin_data,
+                                  _HARD_CAP if max_output is None else max_output)
+    if max_output is None:
+        out = out[-_MAX_OUTPUT:]
+    return code, out, err[-_MAX_OUTPUT:]
 
 
 def _patches(outbox):
@@ -145,12 +205,8 @@ def run_worker(store, run_id, task_id, generation, token, outbox, argv, inputs=N
             raise ValueError("project dispatch paused")
         _live(store, run_id, task_id, generation, token)
         consume(conn, project, run_id, task_id, "worker")
-    try:
-        result = subprocess.run(_command(root, outbox, checked, list(argv)), capture_output=True,
-                                timeout=timeout, env={"PATH": "/usr/bin:/bin"}, stdin=subprocess.DEVNULL)
-        code, out, err = result.returncode, result.stdout[-_MAX_OUTPUT:], result.stderr[-_MAX_OUTPUT:]
-    except subprocess.TimeoutExpired:
-        code, out, err = -1, b"", b"timeout"
+    code, out, err = _bounded_run(_command(root, outbox, checked, list(argv)), timeout)
+    out, err = out[-_MAX_OUTPUT:], err[-_MAX_OUTPUT:]
     applied = []
     if code == 0:
         for name, data, problem in _patches(outbox):

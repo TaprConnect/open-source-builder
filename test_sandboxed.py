@@ -12,7 +12,7 @@ def fake_child(version, fail_keys=(), crash_batch=False):
         keys = [k for k, _, _ in items]
         if crash_batch and len(items) > 1 or any(k in fail_keys for k in keys):
             return -9, b"", b"killed"
-        results = {k: ["analysed", {"findings": []}] for k in keys}
+        results = {k: ["analysed", {"symbols": [], "imports": [], "calls": [], "findings": [], "facts": {}}] for k in keys}
         return 0, json.dumps({"version": version, "results": results}).encode(), b""
     return run
 
@@ -33,8 +33,8 @@ class SandboxedAnalysisTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "version"):
             analyse([("python:a", "python", b"x = 1\n")])
 
-    def test_failed_batch_is_attributed_per_file(self):
-        analyse = self.analyser(fake_child(analysis.VERSION, fail_keys={"python:bomb"}, crash_batch=True))
+    def test_failed_file_is_attributed_per_file(self):
+        analyse = self.analyser(fake_child(analysis.VERSION, fail_keys={"python:bomb"}))
         results = analyse([("python:ok", "python", b"x = 1\n"), ("python:bomb", "python", b"y = 2\n")])
         self.assertIsNone(results["python:bomb"])
         self.assertEqual(results["python:ok"][0], "analysed")

@@ -38,6 +38,7 @@ def main(argv=None):
             p.add_argument('--analysis-cpu',type=int,default=10)
             p.add_argument('--analysis-memory',type=int,default=512,help='MiB')
             p.add_argument('--trusted-target',action='store_true',help='analyse in-process when isolation is unavailable')
+            p.add_argument('--analysis-budget',type=int,default=600,help='seconds for all isolated analysis')
         if name in ('status','transition'):
             p.add_argument('run_id')
         if name=='transition':
@@ -146,13 +147,16 @@ def main(argv=None):
             with Store(repo,a.database) as store:
                 if a.command in ('audit','plan'):
                     if isolation_available():
-                        analyser=isolated_analyser(repo.root,a.analysis_cpu,a.analysis_memory)
+                        analyser=isolated_analyser(repo.root,a.analysis_cpu,a.analysis_memory,budget_seconds=a.analysis_budget)
+                        mode='isolated'
                     elif a.trusted_target or os.environ.get('OSB_TRUSTED_TARGETS')=='1':
                         analyser=None
+                        mode='in_process_trusted'
+                        print('warning: analysing repository content in-process without isolation (trusted target asserted)', file=sys.stderr)
                     else:
                         raise ValueError('analysis isolation unavailable; use --trusted-target only for trusted repositories')
                     report,metrics=scan(repo,store,catalogue(a.catalogue),a.max_blob,a.max_total,analyser)
-                    output={'report':report,'metrics':metrics}
+                    output={'report':report,'metrics':{**metrics,'analysis':mode}}
                     if a.command=='plan':
                         output['run_id']=store.save(report)
                 elif a.command == 'reserve':

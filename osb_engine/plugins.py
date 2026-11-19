@@ -89,6 +89,16 @@ def _functions(tree):
             continue
         calls, mutates = set(), set()
         declared_global = {n for g in ast.walk(node) if isinstance(g, ast.Global) for n in g.names}
+        for default in node.args.defaults + [d for d in node.args.kw_defaults if d is not None]:
+            if isinstance(default, ast.Call) and isinstance(default.func, (ast.Name, ast.Attribute)) and default.args:
+                wrapper = default.func.id if isinstance(default.func, ast.Name) else default.func.attr
+                target = default.args[0]
+                if wrapper in ("Depends", "Security"):
+                    calls.add(wrapper)
+                    if isinstance(target, ast.Name):
+                        calls.add(target.id)
+                    elif isinstance(target, ast.Attribute):
+                        calls.add(target.attr)
         for sub in ast.walk(node):
             if isinstance(sub, ast.Call):
                 f = sub.func

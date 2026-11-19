@@ -73,6 +73,41 @@ def _domain(tree):
     return routes, sorted(env), issues
 
 
+_MUTATORS = {"append", "extend", "update", "add", "insert", "setdefault", "pop", "remove", "clear", "discard"}
+
+
+def _functions(tree):
+    """Per top-level function: names it calls and module-level names it mutates."""
+    module_names = set()
+    for node in tree.body:
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            module_names.update(t.id for t in targets if isinstance(t, ast.Name))
+    out = {}
+    for node in tree.body[:_LIMIT]:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        calls, mutates = set(), set()
+        declared_global = {n for g in ast.walk(node) if isinstance(g, ast.Global) for n in g.names}
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Call):
+                f = sub.func
+                if isinstance(f, ast.Name):
+                    calls.add(f.id)
+                elif isinstance(f, ast.Attribute):
+                    calls.add(f.attr)
+                    if f.attr in _MUTATORS and isinstance(f.value, ast.Name) and f.value.id in module_names:
+                        mutates.add(f.value.id)
+            elif isinstance(sub, (ast.Assign, ast.AugAssign)):
+                for target in (sub.targets if isinstance(sub, ast.Assign) else [sub.target]):
+                    if isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name) and target.value.id in module_names:
+                        mutates.add(target.value.id)
+                    elif isinstance(target, ast.Name) and target.id in declared_global:
+                        mutates.add(target.id)
+        out[node.name] = {"calls": sorted(calls)[:500], "mutates": sorted(mutates)[:100]}
+    return out
+
+
 def _python(data):
     try:
         tree = ast.parse(data)
@@ -102,6 +137,7 @@ def _python(data):
             references.add(node.attr)
     routes, env, issues = _domain(tree)
     return {"state": "SYMBOL_INDEXED", "facts": {"routes": routes[:_LIMIT], "env": env[:_LIMIT], "issues": issues[:_LIMIT],
+                                                 "functions": _functions(tree),
                                                  "definitions": definitions[:_LIMIT], "imports": imports[:_LIMIT],
                                                  "references": sorted(references)[:20 * _LIMIT],
                                                  "exports": exports[:_LIMIT], "main_guard": main_guard}}

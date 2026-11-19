@@ -34,7 +34,7 @@ def valid_facts(result):
     if not isinstance(facts, dict):
         return False
     known = {"definitions", "imports", "references", "exports", "main_guard", "keys", "tables", "dependencies",
-             "routes", "env", "issues"}
+             "routes", "env", "issues", "functions"}
     if set(facts) - known:
         return False
     for d in facts.get("definitions", []):
@@ -52,6 +52,13 @@ def valid_facts(result):
     for i in facts.get("issues", []):
         if not (isinstance(i, dict) and set(i) == {"kind", "function", "line"} and _text(i["function"]) and _count(i["line"])
                 and i["kind"] in ("placeholder", "not_implemented", "swallowed_exception", "bare_except")):
+            return False
+    functions = facts.get("functions", {})
+    if not isinstance(functions, dict) or len(functions) > _ITEMS_MAX:
+        return False
+    for name, info in functions.items():
+        if not (_text(name) and isinstance(info, dict) and set(info) == {"calls", "mutates"}
+                and _texts(info["calls"], 500) and _texts(info["mutates"], 100)):
             return False
     for t in facts.get("tables", []):
         if not (isinstance(t, dict) and set(t) == {"name", "columns"} and _text(t["name"]) and _texts(t["columns"])):
@@ -78,6 +85,10 @@ def _classify(root, declared):
     if _normalise(root) in declared or _normalise(_IMPORT_TO_DIST.get(root, root)) in declared:
         return "declared"
     return "undeclared"
+
+
+_PERSISTENCE = {"execute", "executemany", "commit", "add", "add_all", "save", "insert", "insert_one", "insert_many",
+                "update_one", "put_item", "bulk_write", "connect"}
 
 
 def _module_name(path):
@@ -228,6 +239,32 @@ def build_index(repo, extractor=None):
             tests.setdefault(b, []).append(a)
     untested = sorted(f["path"] for f in python if not is_test(f["path"]) and not f["path"].endswith("__init__.py")
                       and f["path"] not in tests)
+    dead = [d for d in dead if not (is_test(d["path"]) and (d["symbol"].startswith("test") or d["symbol"].startswith("Test")))]
+    by_path = {f["path"]: f["facts"] for f in python}
+    completeness = []
+    for route in routes:
+        facts = by_path.get(route["file"], {})
+        functions = facts.get("functions", {})
+        reach, frontier = set(), [route["function"]]
+        while frontier:
+            name = frontier.pop()
+            if name in reach or name not in functions:
+                continue
+            reach.add(name)
+            frontier += [c for c in functions[name]["calls"] if c in functions]
+        calls = {c for n in reach for c in functions[n]["calls"]}
+        mutates = {m for n in reach for m in functions[n]["mutates"]}
+        flags = []
+        if any(i["function"] == route["function"] and i["kind"] in ("placeholder", "not_implemented")
+               for i in facts.get("issues", [])):
+            flags.append("unimplemented")
+        elif set(route["methods"]) & {"POST", "PUT", "PATCH", "DELETE", "ANY"} - {"ANY"} and not calls & _PERSISTENCE:
+            flags.append("in_memory_persistence" if mutates else "no_persistence")
+        if route["file"] not in tests:
+            flags.append("untested")
+        completeness.append({"path": route["path"], "methods": route["methods"], "handler": route["function"],
+                             "file": route["file"], "flags": flags,
+                             "evidence": {"persistence_calls": sorted(calls & _PERSISTENCE), "mutated_state": sorted(mutates)}})
     for f in files:
         facts = f.get("facts", {})
         if f["language"] == "python" and facts:
@@ -241,6 +278,7 @@ def build_index(repo, extractor=None):
             "missing_dependencies": [{"module": m, "files": sorted(fs)} for m, fs in sorted(missing.items())],
             "entry_points": entry_points, "dead_code_candidates": dead,
             "routes": sorted(routes, key=lambda r: (r["file"], r["line"], r["path"])),
+            "completeness": sorted(completeness, key=lambda c: (c["file"], c["path"], c["methods"])),
             "environment": {k: sorted(set(v)) for k, v in sorted(environment.items())},
             "issues": sorted(issues, key=lambda i: (i["path"], i["line"], i["kind"])),
             "tests": {k: sorted(v) for k, v in sorted(tests.items())}, "untested_sources": untested,

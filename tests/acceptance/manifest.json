@@ -232,5 +232,11 @@
   "platform": "linux",
   "sha256": "9bf06872c466880aeff6d463ee3fd512fc764c4cd4c3b2c270ad7971b9a0e998",
   "task": "S05-006"
+ },
+ "s05_007": {
+  "frozen_hash_verified": true,
+  "platform": "linux",
+  "sha256": "47569992f607d6bd62fa9450c998559d1c60ddc1d76c9fd3f4ca9a4d88c4644f",
+  "task": "S05-007"
  }
 }

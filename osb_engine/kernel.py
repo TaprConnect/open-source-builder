@@ -164,7 +164,7 @@ def worktree_changes(repo, eol="none", exclude=()):
         repo.git("read-tree", repo.revision, extra_env=env)
         others = repo.git("ls-files", "-z", "--others", extra_env=env)
     changed = {path for path in (os.fsdecode(p).rstrip("/") for p in others.split(b"\0") if p)
-               if not any((path + "/").startswith(prefix) for prefix in exclude)}
+               if not any(path.startswith(prefix) for prefix in exclude)}
     regular = []
     for entry in repo.git("ls-tree", "-r", "-z", "--full-tree", repo.revision).split(b"\0"):
         if not entry:
@@ -195,15 +195,25 @@ def worktree_changes(repo, eol="none", exclude=()):
         for path, oid in regular:
             with open(os.path.join(root, *path.split("/")), "rb") as handle:
                 data = handle.read()
-            if _matches(data, oid, eol, blob_id):
+            if _matches(data, oid, eol, blob_id, lambda p=path: _ident_enabled(repo, p)):
                 continue
             changed.add(path)
     return changed
 
 
-def _matches(data, oid, eol, blob_id):
-    """Accept the raw blob, Git's exact ident expansion of this blob's own id, and under
-    the crlf policy the complete LF->CRLF conversion of an LF-only text blob."""
+def _ident_enabled(repo, path):
+    """True only when .gitattributes at the pinned revision sets ident for path."""
+    try:
+        out = repo.git("check-attr", "--source", repo.revision, "ident", "--", path)
+    except subprocess.CalledProcessError:
+        return False
+    return out.decode("utf-8", "replace").rstrip().endswith(": ident: set")
+
+
+def _matches(data, oid, eol, blob_id, ident_enabled=lambda: False):
+    """Accept the raw blob, Git's exact ident expansion of this blob's own id (every marker
+    expanded, ident set at the pinned revision), and under the crlf policy the complete
+    LF->CRLF conversion of an LF-only text blob."""
     candidates = [data]
     if eol == "crlf" and b"\0" not in data:
         lf = data.replace(b"\r\n", b"\n")
@@ -211,8 +221,10 @@ def _matches(data, oid, eol, blob_id):
             candidates.append(lf)
     expanded = b"$Id: " + oid.encode() + b" $"
     for candidate in candidates:
-        if blob_id(candidate) == oid or expanded in candidate and blob_id(
-                candidate.replace(expanded, b"$Id$")) == oid:
+        if blob_id(candidate) == oid:
+            return True
+        if (expanded in candidate and b"$Id$" not in candidate
+                and blob_id(candidate.replace(expanded, b"$Id$")) == oid and ident_enabled()):
             return True
     return False
 
@@ -247,7 +259,10 @@ def begin_journal(store, paths):
     if os.path.exists(path):
         raise ValueError("interrupted operation pending; run recover")
     root, snapshot = str(store.repo.root), {}
+    from .mutation import _safe_target
     for rel in paths:
+        _path(rel)
+        _safe_target(root, rel)
         full = os.path.join(root, *rel.split("/"))
         try:
             with open(full, "rb") as handle:
@@ -285,6 +300,10 @@ def end_journal(store):
 
 
 def _restore(root, snapshot):
+    from .mutation import _safe_target
+    for rel in snapshot:
+        _path(rel)
+        _safe_target(root, rel)
     for rel, entry in sorted(snapshot.items()):
         full = os.path.join(root, *rel.split("/"))
         if entry is None:
@@ -292,8 +311,9 @@ def _restore(root, snapshot):
                 os.unlink(full)
             continue
         os.makedirs(os.path.dirname(full), exist_ok=True)
-        tmp = full + ".osb-restore"
-        with open(tmp, "wb") as handle:
+        tmp = full + ".osb-restore-" + secrets.token_hex(8)
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "wb") as handle:
             handle.write(base64.b64decode(entry["data"]))
         if os.name == "posix":
             os.chmod(tmp, entry["mode"])
@@ -578,8 +598,8 @@ def _lease(store, run_id, task_id, seconds, renewal=None):
                 raise ValueError("task already reserved")
             if _paused(conn, project):
                 raise ValueError("project dispatch paused")
-            if any(t["id"] == task_id and t["state"] == "blocked" for t in plan["tasks"]):
-                raise ValueError("blocked task cannot be reserved")
+            if any(t["id"] == task_id and t["state"] in ("blocked", "proposed") for t in plan["tasks"]):
+                raise ValueError("blocked or proposed task cannot be reserved")
             if completed(conn, project, run_id, task_id):
                 raise ValueError("task already completed")
             missing = [r for (r,) in conn.execute("""SELECT requires FROM kernel_dependencies_v1

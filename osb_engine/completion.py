@@ -21,9 +21,13 @@ from .isolation import run_isolated
 from .mutation import _apply
 
 # Kernel-owned wrapper: the sentinel is printed only if the acceptance returns normally,
-# so repository code that exits the interpreter early cannot produce a pass.
+# so repository code that exits the interpreter early cannot produce a pass. The nonce
+# arrives on stdin, which is closed before the acceptance runs: it never appears in the
+# environment, argv or any /proc file of the sandbox.
 _RUNNER = b"""import os, runpy, sys
-nonce = os.environ.pop("OSB_VERIFY_NONCE")
+nonce = sys.stdin.readline().strip()
+sys.stdin.close()
+os.open("/dev/null", os.O_RDONLY)
 sys.argv = ["/inputs/acceptance.py"]
 runpy.run_path("/inputs/acceptance.py", run_name="__main__")
 sys.stdout.flush()
@@ -123,7 +127,8 @@ def verify(store, run_id, task_id, generation, acceptance, timeout=600):
                 with open(inputs[name], "wb") as handle:
                     handle.write(data)
             code, out, err = run_isolated(repo.root, ["python3", "-I", "-B", "/inputs/runner.py"], inputs,
-                                          timeout, {"OSB_VERIFY_NONCE": nonce, "PYTHONDONTWRITEBYTECODE": "1"})
+                                          timeout, {"PYTHONDONTWRITEBYTECODE": "1"},
+                                          (nonce + "\n").encode())
         lines = out.decode("utf-8", "replace").strip().splitlines()
         sentinel = bool(lines) and lines[-1] == "OSB-VERIFY-PASS " + nonce
         output = out + b"\0" + err

@@ -50,13 +50,13 @@ def _command(root, outbox, inputs, argv, env=None):
                   "/usr/bin:/bin", "--", *argv]
 
 
-def run_isolated(root, argv, inputs, timeout, env=None):
+def run_isolated(root, argv, inputs, timeout, env=None, stdin_data=b""):
     """Run argv with the checkout read-only and no writable host path; return (code, stdout, stderr)."""
     if not available():
         raise ValueError("isolation unavailable on this host")
     try:
         result = subprocess.run(_command(root, None, inputs, list(argv), env), capture_output=True,
-                                timeout=timeout, env={"PATH": "/usr/bin:/bin"}, stdin=subprocess.DEVNULL)
+                                timeout=timeout, env={"PATH": "/usr/bin:/bin"}, input=stdin_data)
         return result.returncode, result.stdout[-_MAX_OUTPUT:], result.stderr[-_MAX_OUTPUT:]
     except subprocess.TimeoutExpired:
         return -1, b"", b"timeout"

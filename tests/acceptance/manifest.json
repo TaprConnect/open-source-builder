@@ -1,212 +1,218 @@
 {
- "rev1": {
-  "frozen_hash_verified": true,
-  "platform": "any",
-  "sha256": "afb53ae3d037962aac29aa09ca975aaca59a7ea1ca376e8f434507da854eb97a",
-  "task": "REV1"
- },
- "rev2": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "1627694313bcd14938a4016173019179acddba7abf2f82e156253a0fa68e15b3",
-  "task": "REV2"
- },
- "rev3": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "1bc75aa0fb979bbdcaa778c28669ac6e9b329af98d0a7fffb832da1c70658ef3",
-  "task": "REV3"
- },
- "s02_001": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "20ce5d8f5eee2ae10acf956373e9c9eaecf75ecee091a784b2972d847cae0884",
-  "task": "S02-001"
- },
- "s02_002": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "c19bb57540919cb160704e94a59cc369945e080accec8dacbb28468ef163488c",
-  "task": "S02-002"
- },
- "s02_002r": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "8ffaad7fffab5b1d52c269b466f59e8ec826b52bb3d5d9394f19244f26bdcd04",
-  "task": "S02-002R"
- },
- "s02_003": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "5c97bf452d3bff811e420fd45d8844dc4be43a0eaa5208a3658a62ef45cf62f9",
-  "task": "S02-003"
- },
- "s02_004": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "f9b94a9d291a7ddd2e956deb6484ccf967580445ddc53fab90a9c882b21433d4",
-  "task": "S02-004"
- },
- "s02_005": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "57895254915ce2861adb9a8e9755db6b59ed0c4c3012f83ae57a42fcbc4f86ac",
-  "task": "S02-005"
- },
- "s02_006": {
-  "frozen_hash_verified": true,
-  "platform": "windows",
-  "sha256": "b638b7a59c08fcddc88cc51b7547f362a47afb0e0c65bf563dd092e2b96604f4",
-  "task": "S02-006"
- },
- "s02_007": {
-  "frozen_hash_verified": true,
-  "platform": "any",
-  "sha256": "bebd3429555b2cff3d4719ac46ac39feac3378a1c99c34f140f6e90b8fcd4212",
-  "task": "S02-007"
- },
- "s02_010": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "3692d8f64a9bebe5a252ac9e8c8de35438076ac613e66480a44e178ea28cb707",
-  "task": "S02-010"
- },
- "s02_011": {
-  "frozen_hash_verified": true,
-  "platform": "any",
-  "sha256": "2be63d9ad74bec5b3befa1e24bbebf7e1c21e03ac55993f67fda3db2fc1053dc",
-  "task": "S02-011"
- },
- "s02_012": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "4f6b360b44ec5947bf0f02bc4873a5f4ec4454224c43f61e69bab01f996ca7fc",
-  "task": "S02-012"
- },
- "s02_013": {
-  "frozen_hash_verified": true,
-  "platform": "any",
-  "sha256": "b37e4d2a39ea4da69e1bd9874d44228eb67cc0677143033a9fefbb4e3badce07",
-  "task": "S02-013"
- },
- "s02_014": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "e20813cf9640288d60af39a96be68689dc17624ad4a70cb63d8177a4c1725b41",
-  "task": "S02-014"
- },
- "s02_015": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "67e29fe2986b90c025bf12b70e3c8ed2a38a0c2325e3c115dfc3be9de798fd2b",
-  "task": "S02-015"
- },
- "s02_017": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "f2f8526bf8b47f6824e28290ec2a45fa5d9e3b294fdbfbde02e538f32fe21e84",
-  "task": "S02-017 (v3 amendment)"
- },
- "s02_017r": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "977e727546f5492b89c54388276e1f5ebec363f7888feea2a0f18907de7210d8",
-  "task": "S02-017R"
- },
- "s03_001": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "8c107a7a865fc5b123d7b3c185fa35e62d4316a6f50b286dc76663b622c6feea",
-  "task": "S03-001"
- },
- "s03_001r": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "0f11f0a8f9fa43c9c62b97ee360060f7d61d2d57baa07d686483f70264bfdfad",
-  "task": "S03-001R"
- },
- "s03_002": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "67da2c6f055d22bb5a2bf0adcef5c3b5bdaaba3f3762538660b0c899aaddc7ad",
-  "task": "S03-002"
- },
- "s03_002r": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "1d15394f010806ca3eb3a15841ff7ec9caeaeb62ba367fea65b7a730eee5e1b9",
-  "task": "S03-002R"
- },
- "s03_003": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "f9f0def19461bb874449b8f8d318875a272b2bad5e620b40bd38a49b3a66c574",
-  "task": "S03-003"
- },
- "s03_004": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "063ee76587bc9d47297b49efa3787b7eaf442348cc54b9e5e4cedf9d009b1df8",
-  "task": "S03-004"
- },
- "s03_005a": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "e79e390336b5633937354adcef5c2375af7b7501b5199052c20aa21824c2664e",
-  "task": "S03-005A"
- },
- "s03_005b": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "8c3ca03c091cdac65b78c563aaeab0f1d9fa408378f896cd292d41db93befcac",
-  "task": "S03-005B"
- },
- "s04_001": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "8d04077bf74e36d5775c44ebbc680122e84abae3e02153c4ad99494b2dc20e4b",
-  "task": "S04-001"
- },
- "s04_002": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "1441bd40fd9fa3f5926e0d9cfcbe3e0df933f8d5c043684ccb316b7bee8a3350",
-  "task": "S04-002"
- },
- "s04_003": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "ea4d4986c6a161b92bf29f045b47dac5f3f2e245a913a92d5c3b9116bc4103f0",
-  "task": "S04-003"
- },
- "s04_004": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "ce685741477a9ca602bef35beba0b75d6435239b6b4cd7b68eeabbf1432a2acd",
-  "task": "S04-004"
- },
- "s04_005": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "4323654313250aee4565703537c977726e0462caa76ac65bf4aa578c65d7cef9",
-  "task": "S04-005"
- },
- "s04_006": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "5a923699972030f3217899b59f60b65e88db641d28ff0b31c5fae11906ede077",
-  "task": "S04-006"
- },
- "s04_008": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "4452bfed8d51e615d6bba6dec209fadb4c564562248462d4833a26e3cd65e24e",
-  "task": "S04-008"
- },
- "s04_009": {
-  "frozen_hash_verified": true,
-  "platform": "linux",
-  "sha256": "8e4e2dc0a1fc181040413a8eb205d8128676ffede09ef45c437bb19ad6699ba2",
-  "task": "S04-009"
- }
+  "rev1": {
+    "frozen_hash_verified": true,
+    "platform": "any",
+    "sha256": "afb53ae3d037962aac29aa09ca975aaca59a7ea1ca376e8f434507da854eb97a",
+    "task": "REV1"
+  },
+  "rev2": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "1627694313bcd14938a4016173019179acddba7abf2f82e156253a0fa68e15b3",
+    "task": "REV2"
+  },
+  "rev3": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "1bc75aa0fb979bbdcaa778c28669ac6e9b329af98d0a7fffb832da1c70658ef3",
+    "task": "REV3"
+  },
+  "s02_001": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "20ce5d8f5eee2ae10acf956373e9c9eaecf75ecee091a784b2972d847cae0884",
+    "task": "S02-001"
+  },
+  "s02_002": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "c19bb57540919cb160704e94a59cc369945e080accec8dacbb28468ef163488c",
+    "task": "S02-002"
+  },
+  "s02_002r": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "8ffaad7fffab5b1d52c269b466f59e8ec826b52bb3d5d9394f19244f26bdcd04",
+    "task": "S02-002R"
+  },
+  "s02_003": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "5c97bf452d3bff811e420fd45d8844dc4be43a0eaa5208a3658a62ef45cf62f9",
+    "task": "S02-003"
+  },
+  "s02_004": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "f9b94a9d291a7ddd2e956deb6484ccf967580445ddc53fab90a9c882b21433d4",
+    "task": "S02-004"
+  },
+  "s02_005": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "57895254915ce2861adb9a8e9755db6b59ed0c4c3012f83ae57a42fcbc4f86ac",
+    "task": "S02-005"
+  },
+  "s02_006": {
+    "frozen_hash_verified": true,
+    "platform": "windows",
+    "sha256": "b638b7a59c08fcddc88cc51b7547f362a47afb0e0c65bf563dd092e2b96604f4",
+    "task": "S02-006"
+  },
+  "s02_007": {
+    "frozen_hash_verified": true,
+    "platform": "any",
+    "sha256": "bebd3429555b2cff3d4719ac46ac39feac3378a1c99c34f140f6e90b8fcd4212",
+    "task": "S02-007"
+  },
+  "s02_010": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "3692d8f64a9bebe5a252ac9e8c8de35438076ac613e66480a44e178ea28cb707",
+    "task": "S02-010"
+  },
+  "s02_011": {
+    "frozen_hash_verified": true,
+    "platform": "any",
+    "sha256": "2be63d9ad74bec5b3befa1e24bbebf7e1c21e03ac55993f67fda3db2fc1053dc",
+    "task": "S02-011"
+  },
+  "s02_012": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "4f6b360b44ec5947bf0f02bc4873a5f4ec4454224c43f61e69bab01f996ca7fc",
+    "task": "S02-012"
+  },
+  "s02_013": {
+    "frozen_hash_verified": true,
+    "platform": "any",
+    "sha256": "b37e4d2a39ea4da69e1bd9874d44228eb67cc0677143033a9fefbb4e3badce07",
+    "task": "S02-013"
+  },
+  "s02_014": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "e20813cf9640288d60af39a96be68689dc17624ad4a70cb63d8177a4c1725b41",
+    "task": "S02-014"
+  },
+  "s02_015": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "67e29fe2986b90c025bf12b70e3c8ed2a38a0c2325e3c115dfc3be9de798fd2b",
+    "task": "S02-015"
+  },
+  "s02_017": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "f2f8526bf8b47f6824e28290ec2a45fa5d9e3b294fdbfbde02e538f32fe21e84",
+    "task": "S02-017 (v3 amendment)"
+  },
+  "s02_017r": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "977e727546f5492b89c54388276e1f5ebec363f7888feea2a0f18907de7210d8",
+    "task": "S02-017R"
+  },
+  "s03_001": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "8c107a7a865fc5b123d7b3c185fa35e62d4316a6f50b286dc76663b622c6feea",
+    "task": "S03-001"
+  },
+  "s03_001r": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "0f11f0a8f9fa43c9c62b97ee360060f7d61d2d57baa07d686483f70264bfdfad",
+    "task": "S03-001R"
+  },
+  "s03_002": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "67da2c6f055d22bb5a2bf0adcef5c3b5bdaaba3f3762538660b0c899aaddc7ad",
+    "task": "S03-002"
+  },
+  "s03_002r": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "1d15394f010806ca3eb3a15841ff7ec9caeaeb62ba367fea65b7a730eee5e1b9",
+    "task": "S03-002R"
+  },
+  "s03_003": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "f9f0def19461bb874449b8f8d318875a272b2bad5e620b40bd38a49b3a66c574",
+    "task": "S03-003"
+  },
+  "s03_004": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "063ee76587bc9d47297b49efa3787b7eaf442348cc54b9e5e4cedf9d009b1df8",
+    "task": "S03-004"
+  },
+  "s03_005a": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "e79e390336b5633937354adcef5c2375af7b7501b5199052c20aa21824c2664e",
+    "task": "S03-005A"
+  },
+  "s03_005b": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "8c3ca03c091cdac65b78c563aaeab0f1d9fa408378f896cd292d41db93befcac",
+    "task": "S03-005B"
+  },
+  "s04_001": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "8d04077bf74e36d5775c44ebbc680122e84abae3e02153c4ad99494b2dc20e4b",
+    "task": "S04-001"
+  },
+  "s04_002": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "1441bd40fd9fa3f5926e0d9cfcbe3e0df933f8d5c043684ccb316b7bee8a3350",
+    "task": "S04-002"
+  },
+  "s04_003": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "ea4d4986c6a161b92bf29f045b47dac5f3f2e245a913a92d5c3b9116bc4103f0",
+    "task": "S04-003"
+  },
+  "s04_004": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "ce685741477a9ca602bef35beba0b75d6435239b6b4cd7b68eeabbf1432a2acd",
+    "task": "S04-004"
+  },
+  "s04_005": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "4323654313250aee4565703537c977726e0462caa76ac65bf4aa578c65d7cef9",
+    "task": "S04-005"
+  },
+  "s04_006": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "5a923699972030f3217899b59f60b65e88db641d28ff0b31c5fae11906ede077",
+    "task": "S04-006"
+  },
+  "s04_008": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "4452bfed8d51e615d6bba6dec209fadb4c564562248462d4833a26e3cd65e24e",
+    "task": "S04-008"
+  },
+  "s04_009": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "8e4e2dc0a1fc181040413a8eb205d8128676ffede09ef45c437bb19ad6699ba2",
+    "task": "S04-009"
+  },
+  "s05_001": {
+    "frozen_hash_verified": true,
+    "platform": "linux",
+    "sha256": "a6a8f274bb2d9906e8e74ba01b542759d9e66c3654ec8e8d3b9c819ea4b24dc3",
+    "task": "S05-001"
+  }
 }

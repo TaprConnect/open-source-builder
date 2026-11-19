@@ -100,9 +100,21 @@ def _classify(root, declared):
     import sys
     if root in sys.stdlib_module_names:
         return "stdlib"
-    if _normalise(root) in declared or _normalise(_IMPORT_TO_DIST.get(root, root)) in declared:
+    if _normalise(root) in declared or _normalise(_IMPORT_TO_DIST.get(root, root)) in declared \
+            or any(_normalise(d) in declared for d in _ALTERNATIVE_DISTS.get(root, ())):
         return "declared"
     return "undeclared"
+
+
+# Import names satisfied by more than one distribution (binary/headless/contrib builds, forks).
+_ALTERNATIVE_DISTS = {"psycopg2": ("psycopg2-binary",), "psycopg": ("psycopg-binary", "psycopg-c"),
+                      "cv2": ("opencv-python", "opencv-python-headless", "opencv-contrib-python",
+                              "opencv-contrib-python-headless"),
+                      "PIL": ("pillow-simd",), "yaml": ("ruamel.yaml",), "jose": ("python-jose-cryptodome",),
+                      "Crypto": ("pycryptodome", "pycryptodomex", "pycrypto"), "MySQLdb": ("mysqlclient", "mysql-python"),
+                      "jwt": ("pyjwt",), "serial": ("pyserial",), "magic": ("python-magic", "python-magic-bin")}
+_CREDENTIAL_ISSUING = {"login_user", "logout_user", "set_password", "hash_password", "generate_password_hash",
+                       "create_access_token", "create_refresh_token", "make_password"}
 
 
 _AUTH = __import__("re").compile(r"login|auth|permission|role|jwt|admin|token|current_user|authori[sz]e", __import__("re").I)
@@ -293,7 +305,8 @@ def build_index(repo, extractor=None):
         infos = [by_path[p]["functions"][n] for p, n in reach]
         calls = {c for i in infos for c in i["calls"]}
         mutates = {m for i in infos for m in i["mutates"]}
-        auth = "detected" if any(_AUTH.search(x) for i in infos for x in i["decorators"] + i["calls"]) else "not_detected"
+        auth = "detected" if any(_AUTH.search(x) for i in infos for x in i["decorators"] + i["calls"]
+                                 if x not in _CREDENTIAL_ISSUING) else "not_detected"
         flags = []
         if any(i["function"] == route["function"] and i["kind"] in ("placeholder", "not_implemented")
                for i in facts.get("issues", [])):

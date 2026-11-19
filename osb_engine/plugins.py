@@ -34,7 +34,7 @@ def credential_name(name):
 def real_secret(value):
     """Heuristic: a literal that looks like a real credential. Placeholders, words and phrases are excluded."""
     v = value.strip()
-    return (len(v) >= 8 and not any(c.isspace() for c in v) and not re.fullmatch(r"[a-z][a-z_]*", v)
+    return (len(v) >= 8 and not any(c.isspace() for c in v) and not re.fullmatch(r"[a-z]+(?:[-_.][a-z]+)*", v)
             and not any(p in v.lower() for p in _PLACEHOLDERS))
 
 
@@ -269,6 +269,12 @@ def _tainted(expr, tainted, safe=frozenset()):
     return any(_tainted(child, tainted, safe) for child in ast.iter_child_nodes(expr))
 
 
+def _constructed(expr):
+    """A string built at the call site: f-string, concatenation, % formatting or .format()."""
+    return isinstance(expr, ast.JoinedStr) or (isinstance(expr, ast.BinOp) and isinstance(expr.op, (ast.Add, ast.Mod))) \
+        or (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Attribute) and expr.func.attr == "format")
+
+
 def _taint(tree):
     """Flow-insensitive intraprocedural taint from request inputs to dangerous sinks."""
     findings = []
@@ -299,6 +305,8 @@ def _taint(tree):
             kind = None
             if name in ("execute", "executemany") and _tainted(first, tainted, safe):
                 kind = "sql_injection"
+            elif name in ("fetch", "fetchrow", "fetchval") and _constructed(first) and _tainted(first, tainted, safe):
+                kind = "sql_injection"  # asyncpg-style query methods; a plain variable (e.g. HTTP fetch(url)) is not a query
             elif owner == "os" and name in ("system", "popen") and _tainted(first, tainted, safe):
                 kind = "command_injection"
             elif owner == "subprocess" and name in _SUBPROCESS and _tainted(first, tainted, safe) and any(

@@ -50,14 +50,23 @@ def _command(root, outbox, inputs, argv, env=None):
                   "/usr/bin:/bin", "--", *argv]
 
 
-def run_isolated(root, argv, inputs, timeout, env=None, stdin_data=b""):
+def run_isolated(root, argv, inputs, timeout, env=None, stdin_data=b"", limits=None, max_output=None):
     """Run argv with the checkout read-only and no writable host path; return (code, stdout, stderr)."""
     if not available():
         raise ValueError("isolation unavailable on this host")
+    argv = list(argv)
+    if limits:
+        cpu, memory_mib = limits
+        argv = ["prlimit", f"--cpu={int(cpu)}", f"--as={int(memory_mib) * 1024 * 1024}",
+                "--nofile=64", "--nproc=64", "--"] + argv
     try:
-        result = subprocess.run(_command(root, None, inputs, list(argv), env), capture_output=True,
+        result = subprocess.run(_command(root, None, inputs, argv, env), capture_output=True,
                                 timeout=timeout, env={"PATH": "/usr/bin:/bin"}, input=stdin_data)
-        return result.returncode, result.stdout[-_MAX_OUTPUT:], result.stderr[-_MAX_OUTPUT:]
+        if max_output is None:
+            return result.returncode, result.stdout[-_MAX_OUTPUT:], result.stderr[-_MAX_OUTPUT:]
+        if len(result.stdout) > max_output:
+            return -2, b"", b"output limit exceeded"
+        return result.returncode, result.stdout, result.stderr[-_MAX_OUTPUT:]
     except subprocess.TimeoutExpired:
         return -1, b"", b"timeout"
 

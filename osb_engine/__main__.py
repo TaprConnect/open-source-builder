@@ -1,13 +1,15 @@
 """Command line entry point for the local audit and guarded repair pilot."""
 import argparse
 import json
+import os
 from pathlib import Path
 import sqlite3
 import subprocess
 import sys
 from .kernel import approve, configure, dispatch, recover, set_quota, grant, pause, renew, reserve, resume, revoke
 from .completion import complete, depend, freeze, release, verify
-from .isolation import run_worker
+from .isolation import available as isolation_available, run_worker
+from .sandboxed import isolated_analyser
 from .mutation import mutate
 from .repository import Repository
 from .store import Store
@@ -33,6 +35,9 @@ def main(argv=None):
             p.add_argument('--catalogue',default=str(Path(__file__).resolve().parent.parent/'profiles'/'checks.tsv'))
             p.add_argument('--max-blob',type=int,default=2*1024*1024)
             p.add_argument('--max-total',type=int,default=32*1024*1024)
+            p.add_argument('--analysis-cpu',type=int,default=10)
+            p.add_argument('--analysis-memory',type=int,default=512,help='MiB')
+            p.add_argument('--trusted-target',action='store_true',help='analyse in-process when isolation is unavailable')
         if name in ('status','transition'):
             p.add_argument('run_id')
         if name=='transition':
@@ -140,7 +145,13 @@ def main(argv=None):
         else:
             with Store(repo,a.database) as store:
                 if a.command in ('audit','plan'):
-                    report,metrics=scan(repo,store,catalogue(a.catalogue),a.max_blob,a.max_total)
+                    if isolation_available():
+                        analyser=isolated_analyser(repo.root,a.analysis_cpu,a.analysis_memory)
+                    elif a.trusted_target or os.environ.get('OSB_TRUSTED_TARGETS')=='1':
+                        analyser=None
+                    else:
+                        raise ValueError('analysis isolation unavailable; use --trusted-target only for trusted repositories')
+                    report,metrics=scan(repo,store,catalogue(a.catalogue),a.max_blob,a.max_total,analyser)
                     output={'report':report,'metrics':metrics}
                     if a.command=='plan':
                         output['run_id']=store.save(report)

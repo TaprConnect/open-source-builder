@@ -6,12 +6,18 @@ from .store import identity
 from .controls import evaluate
 
 
-def scan(repo, store, catalogue, max_blob=2*1024*1024, max_total=32*1024*1024):
+def _in_process(items):
+    return {key: analysis.analyse(kind, data) for key, kind, data in items}
+
+
+def scan(repo, store, catalogue, max_blob=2*1024*1024, max_total=32*1024*1024, analyser=None):
+    """analyser(items) analyses cache misses; the CLI supplies an isolated one (S03-001)."""
     if not 0 < max_blob <= max_total <= 128*1024*1024:
         raise ValueError('invalid analysis byte budget')
     files, findings = [], []
     remaining = max_total
     hits = misses = 0
+    pending, order = {}, []
     for blob in repo.inventory():
         kind = analysis.language(blob.path)
         row = {**asdict(blob), 'language': kind, 'status': 'unsupported_language'}
@@ -30,16 +36,25 @@ def scan(repo, store, catalogue, max_blob=2*1024*1024, max_total=32*1024*1024):
             continue
         remaining -= blob.size
         cached = store.cached(blob.oid, kind, analysis.VERSION)
+        key = kind + ':' + blob.oid
         if cached is None:
             misses += 1
             try:
-                cached = analysis.analyse(kind, repo.read(blob))
+                pending.setdefault(key, (key, kind, repo.read(blob)))
             except (OSError, subprocess.SubprocessError):
                 row['status'] = 'read_blocked'
                 continue
-            store.cache(blob.oid, kind, analysis.VERSION, cached)
         else:
             hits += 1
+        order.append((row, blob, kind, key, cached))
+    results = (analyser or _in_process)(list(pending.values()))
+    for row, blob, kind, key, cached in order:
+        if cached is None:
+            cached = results.get(key)
+            if cached is None:
+                row['status'] = 'analysis_failed'
+                continue
+            store.cache(blob.oid, kind, analysis.VERSION, cached)
         row['status'], row['analysis'] = cached
         for index, f in enumerate(row['analysis']['findings']):
             finding = {**f, 'path': blob.path, 'blob': blob.oid}

@@ -87,7 +87,7 @@ def _classify(root, declared):
     return "undeclared"
 
 
-_AUTH = __import__("re").compile(r"login|auth|permission|role|jwt|admin", __import__("re").I)
+_AUTH = __import__("re").compile(r"login|auth|permission|role|jwt|admin|token|current_user|authori[sz]e", __import__("re").I)
 _PERSISTENCE = {"execute", "executemany", "commit", "add", "add_all", "save", "insert", "insert_one", "insert_many",
                 "update_one", "put_item", "bulk_write", "connect"}
 
@@ -217,9 +217,10 @@ def build_index(repo, extractor=None):
         if f["path"] in entry_points:
             continue
         exports = set(f["facts"].get("exports", []))
+        decorated = {n for n, info in f["facts"].get("functions", {}).items() if info.get("decorators")}
         for d in f["facts"].get("definitions", []):
             name = d["name"]
-            if name.startswith("_") or name in exports or name in referenced:
+            if name.startswith("_") or name in exports or name in referenced or name in decorated:
                 continue
             dead.append({"path": f["path"], "symbol": name, "kind": d["kind"], "line": d["line"],
                          "confidence": "candidate", "note": "no static reference in this repository"})
@@ -247,8 +248,10 @@ def build_index(repo, extractor=None):
         imports_of.setdefault(a, []).append(b)
     completeness = []
     for route in routes:
-        facts = by_path.get(route["file"], {})
-        reach, frontier = set(), [(route["file"], route["function"])]
+        handler_file = next((c for c in [route["file"]] + imports_of.get(route["file"], [])
+                             if route["function"] in by_path.get(c, {}).get("functions", {})), route["file"])
+        facts = by_path.get(handler_file, {})
+        reach, frontier = set(), [(handler_file, route["function"])]
         while frontier and len(reach) < 2000:
             node = frontier.pop()
             path, name = node

@@ -355,6 +355,28 @@ def use_approval(conn, project, generation, patch):
         raise ValueError("patch not approved for this reservation (approvals bind the exact patch once)")
 
 
+def transition_guard(store, run_id, task_id, current, new):
+    """Keep planning states consistent with kernel lease and completion (S02-015).
+
+    Applies only when a kernel governs the project (a reservation exists)."""
+    conn, project = store.conn, _project(store)
+    _schema(conn)
+    row = conn.execute("SELECT run_id, task_id, generation, expires_ns FROM kernel_reservations_v1 WHERE project=?",
+                       (project,)).fetchone()
+    if row is None:
+        return
+    if completed(conn, project, run_id, task_id):
+        if new != "proposed" or current == "proposed":
+            raise ValueError("completed task may only move to proposed, which is final")
+        return
+    if new == "proposed":
+        raise ValueError("proposed requires kernel completion")
+    held = (tuple(row[:2]) == (run_id, task_id) and row[3] > time.time_ns()
+            and not _revoked(conn, project, row[2]))
+    if held and new in ("open", "blocked"):
+        raise ValueError("task is held by a live reservation; release it first")
+
+
 QUOTA_KINDS = ("mutate", "verify", "worker")
 
 
@@ -556,6 +578,8 @@ def _lease(store, run_id, task_id, seconds, renewal=None):
                 raise ValueError("task already reserved")
             if _paused(conn, project):
                 raise ValueError("project dispatch paused")
+            if any(t["id"] == task_id and t["state"] == "blocked" for t in plan["tasks"]):
+                raise ValueError("blocked task cannot be reserved")
             if completed(conn, project, run_id, task_id):
                 raise ValueError("task already completed")
             missing = [r for (r,) in conn.execute("""SELECT requires FROM kernel_dependencies_v1

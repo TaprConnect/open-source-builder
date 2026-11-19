@@ -106,6 +106,8 @@ class Store:
             row = self.conn.execute('SELECT state,version FROM engine_tasks WHERE run_id=? AND id=?', (key, task)).fetchone()
             if not row or row[1] != version or state not in allowed[row[0]]:
                 raise ValueError('invalid or conflicting transition')
+            from .kernel import transition_guard
+            transition_guard(self, key, task, row[0], state)
             self.conn.execute('UPDATE engine_tasks SET state=?,version=version+1,reason=? WHERE run_id=? AND id=?', (state,reason,key,task))
             self.conn.execute('INSERT INTO engine_events(run_id,task_id,previous,next,reason) VALUES (?,?,?,?,?)', (key,task,row[0],state,reason))
         return self.view(key)

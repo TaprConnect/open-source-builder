@@ -324,8 +324,8 @@ def _main(argv):
                 _EVENT['run_id']=output['run_id']
             report=output.get('report') if isinstance(output.get('report'),dict) else {}
             size=lambda v: len(v) if isinstance(v,list) else (v if isinstance(v,int) else 0)
-            _EVENT['counts']={'files':size(report.get('files')),'findings':size(report.get('findings')),
-                              'tasks':size(output.get('tasks'))}
+            _EVENT['counts']={'files_count':size(report.get('files')),'finding_count':size(report.get('findings')),
+                              'task_count':size(output.get('tasks'))}
         if getattr(a,'format','json')=='text':
             sys.stdout.write(text_report(a.command,output))
         else:

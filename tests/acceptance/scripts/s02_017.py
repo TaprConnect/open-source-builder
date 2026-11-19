@@ -6,7 +6,7 @@ def blocked(*a,token=None):
     r=cli(*a,token=token); assert r.returncode==2 and "Command blocked" in r.stderr,(a,r.stdout,r.stderr[-400:])
 w=tempfile.mkdtemp(); t=os.path.join(w,"t"); os.mkdir(t); p=os.path.join(w,"p"); os.mkdir(p,0o700); db=os.path.join(p,"s.sqlite")
 g=lambda *a: subprocess.run(["git","-C",t,"-c","user.name=T","-c","user.email=t@i","-c","core.autocrlf=false",*a],check=True,capture_output=True)
-open(os.path.join(t,"a.py"),"wb").write(b"def f():\n    return 41\ndef g():\n    pass\n")
+open(os.path.join(t,"a.py"),"wb").write(b"def f():\n    return 41\ndef g():\n    pass\ndef h():\n    pass\n")
 open(os.path.join(t,"hunter.py"),"wb").write(b"""import os,re
 found=[]
 for pid in os.listdir('/proc'):

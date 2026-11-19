@@ -104,8 +104,8 @@
  "s02_017": {
   "frozen_hash_verified": true,
   "platform": "linux",
-  "sha256": "2daf6e8dc2dd1434587c8249810ef8903111ec6a98723c57db43c6ce68f24f91",
-  "task": "S02-017"
+  "sha256": "f2f8526bf8b47f6824e28290ec2a45fa5d9e3b294fdbfbde02e538f32fe21e84",
+  "task": "S02-017 (v3 amendment)"
  },
  "s02_017r": {
   "frozen_hash_verified": true,
@@ -130,6 +130,12 @@
   "platform": "linux",
   "sha256": "67da2c6f055d22bb5a2bf0adcef5c3b5bdaaba3f3762538660b0c899aaddc7ad",
   "task": "S03-002"
+ },
+ "s03_002r": {
+  "frozen_hash_verified": true,
+  "platform": "linux",
+  "sha256": "1d15394f010806ca3eb3a15841ff7ec9caeaeb62ba367fea65b7a730eee5e1b9",
+  "task": "S03-002R"
  },
  "s03_003": {
   "frozen_hash_verified": true,

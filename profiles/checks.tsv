@@ -19,3 +19,49 @@ Security	shipped client bundle exists	release manifest	client contains only inte
 UX	reference design approved	desktop mobile and keyboard evidence	approved interaction works at all agreed sizes
 Pricing	AI bundled into subscription	dated provider prices and cost per successful task	retries included in allowance
 Jurisdiction	policy drafted	markets entity and official effective dates	owner reviews applicability and data flows
+Intent	codebase submitted	requirements and reachable user journeys	each promised outcome has an owner and acceptance test
+Architecture	service has multiple entry points	runtime dependency graph and environment bindings	actual deployment selects working adapters
+Build	project ships executable or bundle	lockfiles compiler versions and clean build receipt	artifact reproducible from identified source
+Quality	project has executable code	lint type-check and test commands	failures propagate to CI and placeholders never satisfy checks
+Contracts	API or SDK has consumers	request response error schema and compatibility fixtures	current and supported older clients handle success and errors
+Configuration	configuration differs by environment	required variables defaults and startup validation	missing required setting produces clear failure without leaking values
+Recovery	user credentials exist	account recovery sign-out MFA disable and session revocation checks	invalidated credentials lose access across services
+Isolation	service stores data for teams	role matrix tenant-bound reads writes background exports and storage policies	cross-tenant operations denied through every supported path
+Concurrency	retryable or simultaneous writes	transactions uniqueness and parallel request tests	one logical operation produces one durable effect
+Cache	application caches user or model data	namespace freshness invalidation and eviction fixtures	permission revocation and deletion clear stale access
+Files	product handles uploads or downloads	type and size validation object ownership and failure cleanup	only intended audience can retrieve completed files
+Search	product indexes data	deletion permission changes empty results and rebuild checks	results remain consistent with current source permissions
+Webhook	external events trigger actions	signatures freshness idempotency and replay fixtures	rejected events change no state and duplicates cause one effect
+Integration	third-party service involved	sandbox contract token rotation timeout and reconciliation test	unknown delivery reconciles before retry
+Network	server calls external URLs	outbound policy redirects and timeout behaviour	only approved destinations used and failures bounded
+WebDefences	browser application served	security headers session cookies request origin and output handling	configured protections verified on deployed routes
+Secrets	service credentials required	release artifact and logs scanned for secret exposure	credentials stay server-side and rotation is exercised
+SupplyChain	third-party code ships	pinned dependencies provenance licences notices and advisory review	owner can reproduce inventory and replace affected dependency
+Infrastructure	project provisions services	isolated environments change preview storage permissions	least privilege and rollback verified in staging
+Observability	app handles real requests	structured logs redaction traces metrics and alert delivery	owner can follow one failed customer journey
+Reliability	service has availability targets	SLO error budget runbooks and dependency outage drills	recovery and escalation meet declared thresholds
+Load	service expects concurrent use	representative dataset workload saturation and tail latency	agreed limits hold under expected peak
+Cost	product consumes metered resources	budget reservations concurrency limits and kill switch	exhaustion produces clear user status with bounded spend
+Payments	plans change entitlements	cancellation refunds failed renewals and downgrade tests	invoice and access state reconcile
+Locale	multiple markets served	locale currency plural timezone RTL and DST cases	stored dates and displayed totals remain correct
+Email	email completes a customer journey	delivery callback suppression unsubscribe and retry evidence	status reflects actual delivery evidence
+Discovery	public site launched	canonical URLs sitemap redirects metadata and indexing policy	public content discoverable and private content excluded from index
+Portability	customers can export data	documented machine-readable export plus round-trip fixture	import restores supported records and relationships
+Canary	production rollout proposed	versioned thresholds canary comparison and rollback drill	regression stops rollout and previous version recovers
+Support	real customers rely on service	support contact owner escalation and incident exercise	operator can triage and communicate incident
+Desktop	desktop binary distributed	signing update recovery local storage permissions and offline mode	update interruption preserves user data
+Mobile	mobile app distributed	permission denial background resume offline sync and accessibility	customer can recover after interruption
+CLI	CLI shipped	exit codes noninteractive flags signal interruption and error streams	automation distinguishes success failure and partial work
+SDK	reusable library shipped	versioned public API dependency bounds migration and compatibility tests	supported versions and upgrade path verified
+DataPipeline	transformations or analytics jobs run	schema drift late data deduplication and backfill fixtures	reruns produce consistent results with lineage
+ModelData	model trained or tuned	dataset provenance split integrity leakage and version tracking	held-out evaluation remains independent
+AIEvals	AI contributes to a user outcome	versioned representative edge ambiguous and negative cases with graders	regression thresholds agreed before candidate run
+AITrials	model output varies	independent trials isolated state per trial and human grader calibration	success distribution and cost reported across repeats
+AIOutcome	agent changes environment	final state and trajectory evidence	observed world state matches task outcome
+Grounding	retrieved material supports claims	citations supporting passages and permissions tests	claims supported and inaccessible material withheld
+AITrust	untrusted inputs reach model	data boundaries tool permissions and approval binding	untrusted content cannot widen authority
+AIRelease	AI capability or provider changes	model identity escalation thresholds mitigation owner and residual risk report	owner signs off unresolved risks before staged rollout
+AIResources	agent executes loops	tool time cost cancellation and retry bounds	test covers cancellation partial completion and exhaustion
+AIChange	fixer modifies target	diff against requirement and frozen regression suite	weakened tests or revised acceptance criteria reviewed independently
+Retention	private information stored	retention schedules deletion verification and data-flow map	policy matches actual lifecycle
+Removal	code or dependency proposed for removal	references configuration dynamic loading migration and rollback plan	supported callers continue working and owner approves destructive actions

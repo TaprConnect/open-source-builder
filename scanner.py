@@ -54,4 +54,12 @@ def inventory(root):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("repository")
-    print(json.dumps(inventory(parser.parse_args().repository), indent=2))
+    parser.add_argument("--private-route", action="append", default=[], help="Committed handler path requiring authentication")
+    parser.add_argument("--durable-route", action="append", default=[], help="Committed handler path promising durable writes")
+    parser.add_argument("--include-manifest-patches", action="store_true", help="Include manifest source context in private report")
+    args = parser.parse_args()
+    from readiness import review
+    report = inventory(args.repository)
+    report["readiness"] = review(report["files"], lambda oid: git(args.repository, "cat-file", "blob", oid),
+                                 args.private_route, args.durable_route, args.include_manifest_patches)
+    print(json.dumps(report, indent=2))

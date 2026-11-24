@@ -67,12 +67,28 @@ def manifest_checks(path, source, paths):
 
     patch = None
     if additions and re.fullmatch(r"[A-Za-z0-9._/@-]+", path):
-        package["scripts"] = {**scripts, **additions}
-        updated = json.dumps(package, indent=2, ensure_ascii=False) + "\n"
-        if source.endswith("\n"):
+        style = round_trip_style(package, source)
+        if style is None:
+            # Rewriting would reformat the file or drop content (duplicate keys, escapes, CRLF).
+            findings.append(candidate("manifest", path, "patch_withheld_unsupported_formatting",
+                "Add the missing scripts by hand; an automatic rewrite would not preserve the existing file.",
+                "Diff the manifest and confirm only the scripts entry changed."))
+        else:
+            package["scripts"] = {**scripts, **additions}
+            updated = json.dumps(package, ensure_ascii=False, **style) + "\n"
             patch = "".join(difflib.unified_diff(source.splitlines(True), updated.splitlines(True),
                                                   fromfile="a/" + path, tofile="b/" + path))
     return findings, patch
+
+
+def round_trip_style(package, source):
+    """Return json.dumps options that reproduce source byte-for-byte, else None."""
+    styles = [{"indent": indent} for indent in (2, 4, "\t")]
+    styles += [{"separators": (",", ":")}, {}]
+    for style in styles:
+        if json.dumps(package, ensure_ascii=False, **style) + "\n" == source:
+            return style
+    return None
 
 
 def review(rows, read_blob, private_routes=(), durable_routes=(), include_patches=False):

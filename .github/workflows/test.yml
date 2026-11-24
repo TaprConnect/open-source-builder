@@ -1,14 +1,53 @@
 name: Verify builder
-on: [push, pull_request]
+on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
 jobs:
   test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        # System Python: 3.10 on 22.04 (declared minimum), 3.12 on 24.04.
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - run: python3 -m unittest discover -v
+      - name: Install and probe bubblewrap
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap
+          # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor.
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          python3 --version
+          bwrap --unshare-all --die-with-parent --ro-bind / / true
+      - name: Unit tests
+        run: python3 -m unittest discover -v 2>&1 | tee "$RUNNER_TEMP/unit.log"; exit "${PIPESTATUS[0]}"
+      - name: Frozen acceptance suite
+        env:
+          OSB_ACCEPTANCE: "1"
+        run: python3 -m unittest -v tests.acceptance.test_frozen 2>&1 | tee "$RUNNER_TEMP/acceptance.log"; exit "${PIPESTATUS[0]}"
+      - name: Reject unexpected skips
+        if: always()
+        run: |
+          {
+            echo "### ${{ matrix.os }} skips"
+            for log in unit acceptance; do
+              [ -f "$RUNNER_TEMP/$log.log" ] || { echo "- $log: not run"; continue; }
+              echo "- $log: $(tail -n 1 "$RUNNER_TEMP/$log.log")"
+              grep -o "skipped '[^']*'" "$RUNNER_TEMP/$log.log" | sort | uniq -c | sed 's/^/  - /'
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+          # Only Windows-only frozen scripts may skip on Linux.
+          if grep -h "skipped '" "$RUNNER_TEMP"/acceptance.log "$RUNNER_TEMP"/unit.log 2>/dev/null \
+              | grep -v "test_frozen" | grep -q .; then
+            echo "::error::unit tests skipped"; exit 1
+          fi
+          if grep -h "skipped '" "$RUNNER_TEMP/acceptance.log" | grep -vq "Windows-only acceptance"; then
+            echo "::error::acceptance scripts skipped for a reason other than Windows-only"; exit 1
+          fi
       - run: python3 scanner.py . > "$RUNNER_TEMP/inventory.json"

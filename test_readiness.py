@@ -49,7 +49,7 @@ class ApplicationTests(unittest.TestCase):
                     subprocess.run(["git", "init", "-q"], cwd=root, check=True)
                     (root / "package.json").write_text(source, newline="")
                     subprocess.run(["git", "apply", "-"], cwd=root, input=patch.encode(), check=True)
-                    self.assertEqual((root / "package.json").read_text(newline=""), expected)
+                    self.assertEqual((root / "package.json").read_bytes(), expected.encode())
 
     def test_patch_withheld_when_rewrite_would_lose_content(self):
         for source in ['{"name":"a","name":"b","dependencies":{"next":"1"}}\n',

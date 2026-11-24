@@ -116,3 +116,24 @@ class TypeScriptFacts(unittest.TestCase):
         self.assertEqual([m["module"] for m in index["missing_dependencies"]], ["pg"])
         self.assertIn(["src/server.ts", "src/auth.ts"], index["graph"]["edges"])
         self.assertTrue(index["completeness_summary"]["frontend_analysis"].startswith("static"))
+
+
+class PostHoldoutPatterns(unittest.TestCase):
+    """Patterns added after the first blind holdout (evidence/s05/report.json); not holdout evidence."""
+    SRC = (b'const cp = require("child_process"); const { exec } = require("child_process");\n'
+           b'const API_TOKEN = "sk_live_51Habcdefghijk";\n'
+           b'app.get("/a", (req, res) => { Todo.find({}).exec(function (err) { res.send(req.query.x); });\n'
+           b'  cp.exec("ls " + req.query.d); exec(req.body.c);\n'
+           b'  User.findOne({ username: req.body.username, password: req.body.password });\n'
+           b'  res.redirect(req.query.url); needle.get(req.query.u); db.query(`SELECT ${req.query.id}`); });\n')
+
+    def test_sinks_and_credentials(self):
+        facts = plugins.extract("javascript", self.SRC, "a.js")["facts"]
+        self.assertEqual(sorted((t["kind"], t["line"]) for t in facts["taint"]),
+                         [("command_injection", 4), ("command_injection", 4), ("nosql_injection", 5),
+                          ("open_redirect", 6), ("sql_injection", 6), ("ssrf", 6)])
+        self.assertEqual([c["name"] for c in facts["credentials"]], ["API_TOKEN"])
+
+    def test_query_builder_exec_is_not_a_shell(self):
+        facts = plugins.extract("javascript", b'app.get("/b", (req, res) => { Todo.find({}).exec(function () { res.send(req.query.q); }); });\n', "b.js")["facts"]
+        self.assertEqual(facts["taint"], [])

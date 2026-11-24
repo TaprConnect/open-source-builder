@@ -66,7 +66,8 @@ def valid_facts(result):
             return False
     for f in facts.get("taint", []):
         if not (isinstance(f, dict) and set(f) == {"kind", "function", "line"} and _text(f["function"]) and _count(f["line"])
-                and f["kind"] in ("sql_injection", "command_injection", "path_traversal", "code_injection")):
+                and f["kind"] in ("sql_injection", "command_injection", "path_traversal", "code_injection",
+                                  "nosql_injection", "open_redirect", "ssrf")):
             return False
     for i in facts.get("issues", []):
         if not (isinstance(i, dict) and set(i) == {"kind", "function", "line"} and _text(i["function"]) and _count(i["line"])

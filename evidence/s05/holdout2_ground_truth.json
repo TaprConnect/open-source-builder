@@ -1,0 +1,127 @@
+{
+ "frozen_at": "2026-11-24T11:05:00+00:00",
+ "method": "Second blind holdout after the post-holdout JavaScript fixes. Ground truth from docs/SUMMARY.md and docs/solution/*.md headings only, written before OSB was run on this project.",
+ "projects": {
+  "appsecco/dvna": {
+   "commit": "9ba473add536f66ac9007966acb2a775dd31277a",
+   "language": "javascript",
+   "source": "docs/solution/*.md",
+   "defects": [
+    {
+     "id": "D1",
+     "category": "sql_injection",
+     "domain": "WebDefences",
+     "modelled": true
+    },
+    {
+     "id": "D2",
+     "category": "command_injection",
+     "domain": "WebDefences",
+     "modelled": true
+    },
+    {
+     "id": "D3",
+     "category": "insecure_password_reset",
+     "domain": "Identity",
+     "modelled": false
+    },
+    {
+     "id": "D4",
+     "category": "insecure_session_secret",
+     "domain": "Secrets",
+     "modelled": true
+    },
+    {
+     "id": "D5",
+     "category": "hashed_passwords_disclosed",
+     "domain": "Privacy",
+     "modelled": false
+    },
+    {
+     "id": "D6",
+     "category": "sensitive_data_logged",
+     "domain": "Privacy",
+     "modelled": false
+    },
+    {
+     "id": "D7",
+     "category": "xxe",
+     "domain": "WebDefences",
+     "modelled": false
+    },
+    {
+     "id": "D8",
+     "category": "unauthorised_users_api",
+     "domain": "Identity",
+     "modelled": true
+    },
+    {
+     "id": "D9",
+     "category": "missing_authorisation_edit_user",
+     "domain": "Tenancy",
+     "modelled": true
+    },
+    {
+     "id": "D10",
+     "category": "stack_trace_exposed",
+     "domain": "Configuration",
+     "modelled": false
+    },
+    {
+     "id": "D11",
+     "category": "x_powered_by_header",
+     "domain": "WebDefences",
+     "modelled": false
+    },
+    {
+     "id": "D12",
+     "category": "reflected_xss",
+     "domain": "WebDefences",
+     "modelled": false
+    },
+    {
+     "id": "D13",
+     "category": "stored_xss",
+     "domain": "WebDefences",
+     "modelled": false
+    },
+    {
+     "id": "D14",
+     "category": "dom_xss",
+     "domain": "Frontend",
+     "modelled": false
+    },
+    {
+     "id": "D15",
+     "category": "insecure_deserialization",
+     "domain": "WebDefences",
+     "modelled": false
+    },
+    {
+     "id": "D16",
+     "category": "mathjs_rce_vulnerable_component",
+     "domain": "SupplyChain",
+     "modelled": false
+    },
+    {
+     "id": "D17",
+     "category": "csrf",
+     "domain": "WebDefences",
+     "modelled": false
+    },
+    {
+     "id": "D18",
+     "category": "unvalidated_redirect",
+     "domain": "WebDefences",
+     "modelled": true
+    },
+    {
+     "id": "D19",
+     "category": "insufficient_logging",
+     "domain": "Observability",
+     "modelled": true
+    }
+   ]
+  }
+ }
+}

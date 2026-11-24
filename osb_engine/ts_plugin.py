@@ -17,6 +17,9 @@ _SQL_SINKS = {"query", "execute", "raw", "$queryRawUnsafe", "$executeRawUnsafe",
 _SHELL_SINKS = {"exec", "execSync", "spawn", "spawnSync", "execFile", "execFileSync"}
 _FS_SINKS = {"readFile", "readFileSync", "createReadStream", "sendFile", "writeFile", "writeFileSync", "unlink", "unlinkSync"}
 _REQUEST_ROOTS = {"req", "request", "ctx", "event"}
+_NOSQL_SINKS = {"find", "findOne", "findOneAndUpdate", "findOneAndDelete", "updateOne", "deleteOne", "deleteMany",
+                "updateMany", "countDocuments", "where"}
+_HTTP_CLIENTS = {"fetch", "get", "post", "request", "needle", "got"}
 _MUTATORS = {"push", "set", "delete", "splice", "unshift", "pop", "shift", "clear", "add"}
 _parsers = {}
 
@@ -128,6 +131,17 @@ def _request_derived(node, source, budget):
     return False
 
 
+def _request_object(node, source, budget):
+    """A whole request-controlled value passed as a query object, e.g. find({user: req.body.user})."""
+    for n in _walk(node, budget):
+        if n.type == "member_expression":
+            name = _callee(n, source) or ""
+            root, _, rest = name.partition(".")
+            if root in _REQUEST_ROOTS and rest.split(".")[0] in ("body", "query", "params") and rest.count(".") <= 1:
+                return True
+    return False
+
+
 def _dynamic_string(node):
     return node.type == "template_string" and any(c.type == "template_substitution" for c in node.children) \
         or node.type == "binary_expression"
@@ -136,6 +150,17 @@ def _dynamic_string(node):
 def _is_route_argument(node):
     args = node.parent
     return args is not None and args.type == "arguments"
+
+
+def _credential_helpers():
+    try:
+        from . import plugins as helpers
+    except ImportError:  # isolated child: plugins.py sits beside this module
+        try:
+            import plugins as helpers
+        except ImportError:
+            return None
+    return helpers.credential_name, helpers.real_secret
 
 
 def _inside_function(node, func_types):
@@ -180,6 +205,25 @@ def _facts(path, root, source):
                             and _text(value, source).split("(")[0].replace("new", "").strip() in ("Map", "Set", "Array")):
                         module_state.add(_text(name, source))
     next_path, router_kind = _route_path_from_file(path)
+    shell_aliases, credentials = set(), []
+    names = _credential_helpers()
+    for n in _walk(root, budget):
+        if n.type == "variable_declarator":
+            value, target = n.child_by_field_name("value"), n.child_by_field_name("name")
+            if value is not None and value.type == "call_expression" and _callee(value.child_by_field_name("function"), source) == "require" \
+                    and "child_process" in _text(value, source) and target is not None:
+                shell_aliases.update(_text(i, source) for i in _walk(target, budget)
+                                     if i.type in ("identifier", "shorthand_property_identifier_pattern"))
+        elif n.type == "import_statement" and "child_process" in _text(n, source):
+            shell_aliases.update(_text(i, source) for i in _walk(n, budget) if i.type == "identifier")
+        if names and n.type in ("pair", "variable_declarator", "assignment_expression"):
+            key = n.child_by_field_name("key") or n.child_by_field_name("name") or n.child_by_field_name("left")
+            value = n.child_by_field_name("value") or n.child_by_field_name("right")
+            literal = _string(value, source) if value is not None else None
+            label = (_callee(key, source) if key is not None and key.type != "string" else _string(key, source)) if key is not None else None
+            if label and literal is not None and names[0](label.rsplit(".", 1)[-1]) and names[1](literal):
+                credentials.append({"kind": "literal", "name": label.rsplit(".", 1)[-1], "line": n.start_point[0] + 1})
+    shell_aliases.add("require")  # require("child_process").exec(...)
 
     def function_name(node):
         name = node.child_by_field_name("name")
@@ -215,12 +259,20 @@ def _facts(path, root, source):
                     args = n.child_by_field_name("arguments")
                     first = args.named_children[0] if args is not None and args.named_children else None
                     if first is not None:
-                        if last in _SQL_SINKS and _dynamic_string(first) and _request_derived(first, source, budget):
-                            taint.append({"kind": "sql_injection", "function": name, "line": n.start_point[0] + 1})
-                        elif last in _SHELL_SINKS and _request_derived(args, source, budget):
+                        shell = last in _SHELL_SINKS and (head in shell_aliases or not head and last in shell_aliases)
+                        if shell and _request_derived(args, source, budget):
                             taint.append({"kind": "command_injection", "function": name, "line": n.start_point[0] + 1})
+                        elif not shell and last in _SQL_SINKS and _dynamic_string(first) and _request_derived(first, source, budget):
+                            taint.append({"kind": "sql_injection", "function": name, "line": n.start_point[0] + 1})
                         elif last in _FS_SINKS and _request_derived(first, source, budget):
                             taint.append({"kind": "path_traversal", "function": name, "line": n.start_point[0] + 1})
+                    if first is not None and last in _NOSQL_SINKS and first.type in ("object", "identifier", "member_expression") \
+                            and _request_object(first, source, budget):
+                        taint.append({"kind": "nosql_injection", "function": name, "line": n.start_point[0] + 1})
+                    if first is not None and last == "redirect" and _request_derived(first, source, budget):
+                        taint.append({"kind": "open_redirect", "function": name, "line": n.start_point[0] + 1})
+                    if first is not None and last in _HTTP_CLIENTS and _request_derived(first, source, budget):
+                        taint.append({"kind": "ssrf", "function": name, "line": n.start_point[0] + 1})
                     if target in ("eval", "Function") and args is not None and _request_derived(args, source, budget):
                         taint.append({"kind": "code_injection", "function": name, "line": n.start_point[0] + 1})
             elif n.type == "assignment_expression":
@@ -366,7 +418,7 @@ def _facts(path, root, source):
             references.add(_text(node, source))
     facts = {"definitions": definitions[:_LIMIT], "imports": imports[:_LIMIT], "routes": routes[:_LIMIT],
              "env": sorted(env)[:_LIMIT], "env_required": env_required[:_LIMIT], "issues": issues[:_LIMIT],
-             "taint": taint[:_LIMIT], "fetches": fetches[:_LIMIT], "a11y": a11y[:_LIMIT], "exports": sorted(exports)[:_LIMIT],
+             "taint": taint[:_LIMIT], "fetches": fetches[:_LIMIT], "a11y": a11y[:_LIMIT], "credentials": credentials[:_LIMIT], "exports": sorted(exports)[:_LIMIT],
              "references": sorted(references)[:20000],
              "functions": dict(list(sorted(functions.items()))[:_LIMIT])}
     state = "SYMBOL_INDEXED" if not root.has_error else "PARSED"

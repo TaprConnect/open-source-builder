@@ -1,6 +1,7 @@
 """Return the next unread committed source range from a private coverage ledger."""
 import argparse
 import json
+import subprocess
 from pathlib import Path
 
 from coverage import assess
@@ -44,5 +45,9 @@ if __name__ == "__main__":
     parser.add_argument("--max-lines", type=int, default=100)
     parser.add_argument("--max-chars", type=int, default=12000)
     args = parser.parse_args()
-    ledger = json.loads(args.ledger.read_bytes()) if args.ledger else None
-    print(json.dumps(next_range(args.repository, ledger, args.max_lines, args.max_chars), indent=2))
+    try:
+        ledger = json.loads(args.ledger.read_bytes()) if args.ledger else None
+        result = next_range(args.repository, ledger, args.max_lines, args.max_chars)
+    except (OSError, KeyError, TypeError, ValueError, subprocess.CalledProcessError) as error:
+        parser.exit(2, f"Research blocked: {error}\n")
+    print(json.dumps(result, indent=2))

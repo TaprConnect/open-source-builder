@@ -28,6 +28,39 @@ class ApplicationTests(unittest.TestCase):
         findings, patch = manifest_checks("package.json", '{"scripts":{"lint":"check","build":"custom"},"dependencies":{"next":"1"}}', set())
         self.assertEqual((findings, patch), ([], None))
 
+    def test_patch_preserves_existing_formatting(self):
+        cases = {
+            "four_spaces": ('{\n    "name": "x",\n    "dependencies": {\n        "next": "1"\n    }\n}\n',
+                            '{\n    "name": "x",\n    "dependencies": {\n        "next": "1"\n    },\n'
+                            '    "scripts": {\n        "build": "next build"\n    }\n}\n'),
+            "tabs": ('{\n\t"dependencies": {\n\t\t"next": "1"\n\t}\n}\n',
+                     '{\n\t"dependencies": {\n\t\t"next": "1"\n\t},\n\t"scripts": {\n\t\t"build": "next build"\n\t}\n}\n'),
+            "compact": ('{"dependencies":{"next":"1"}}\n',
+                        '{"dependencies":{"next":"1"},"scripts":{"build":"next build"}}\n'),
+        }
+        for name, (source, expected) in cases.items():
+            with self.subTest(name):
+                findings, patch = manifest_checks("package.json", source, set())
+                self.assertEqual({f["status"] for f in findings}, {"missing_package_script"})
+                removed = [l for l in patch.splitlines() if l.startswith("-") and not l.startswith("---")]
+                self.assertLessEqual(len(removed), 1, patch)
+                with tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+                    (root / "package.json").write_text(source, newline="")
+                    subprocess.run(["git", "apply", "-"], cwd=root, input=patch.encode(), check=True)
+                    self.assertEqual((root / "package.json").read_text(newline=""), expected)
+
+    def test_patch_withheld_when_rewrite_would_lose_content(self):
+        for source in ['{"name":"a","name":"b","dependencies":{"next":"1"}}\n',
+                       '{\r\n  "dependencies": {\r\n    "next": "1"\r\n  }\r\n}\r\n',
+                       '{"dependencies": {"next": "\\u0031"}}\n',
+                       '{"dependencies":{"next":"1"}}']:
+            with self.subTest(source=source):
+                findings, patch = manifest_checks("package.json", source, set())
+                self.assertIsNone(patch)
+                self.assertIn("patch_withheld_unsupported_formatting", {f["status"] for f in findings})
+
     def test_cli_and_applicable_patch(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

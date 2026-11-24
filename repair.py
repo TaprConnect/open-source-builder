@@ -31,5 +31,9 @@ if __name__ == "__main__":
     parser.add_argument("repository")
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
-    for path in repair(args.repository, args.apply):
+    try:
+        paths = repair(args.repository, args.apply)
+    except (ValueError, OSError, subprocess.CalledProcessError) as error:
+        parser.exit(2, f"Repair blocked: {error}\n")
+    for path in paths:
         print("Applied:" if args.apply else "Proposed:", path)

@@ -41,7 +41,7 @@ python repair.py ../my-app
 python repair.py ../my-app --apply
 ```
 
-The repair command previews by default. In a clean checkout it can add missing Next.js build and ESLint lint scripts where the corresponding dependency (and lint configuration) is present. Inspect the diff and run the project's checks in an isolated environment. The command does not install packages or run target scripts. Optional scanner flag `--include-manifest-patches` includes source context in the private report.
+The repair command previews by default. In a clean checkout it can add missing Next.js build and ESLint lint scripts where the corresponding dependency (and lint configuration) is present. Inspect the diff and run the project's checks in an isolated environment. A patch is offered only when the manifest re-serialises byte-for-byte in its existing style (2 or 4 spaces, tabs or single-line JSON, LF endings); otherwise the report says `patch_withheld_unsupported_formatting` and the scripts must be added by hand. The command does not install packages or run target scripts. Optional scanner flag `--include-manifest-patches` includes source context in the private report.
 
 Auth and storage findings are lexical leads. Comments can match, delegated middleware can be missed, and package scripts can delegate to workspace or CI tooling. Trace the handler and run the supplied acceptance procedure before classifying a defect. No static result grants a security or deployment pass. See the [design, motion and assurance catalogue](profiles/design-references.md).
 

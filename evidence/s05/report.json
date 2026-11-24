@@ -3,6 +3,9 @@
  "certified": false,
  "projects": {
   "snyk-labs/nodejs-goof": {
+   "holdout": "holdout",
+   "frozen_at": "2026-11-24T10:54:03+00:00",
+   "mislabelled": [],
    "commit": "add14ba59e98240d9e00a235dd7d42cd61ae9912",
    "summary": {
     "blocked": 4,
@@ -49,6 +52,9 @@
    ]
   },
   "adeyosemanputra/pygoat": {
+   "holdout": "holdout",
+   "frozen_at": "2026-11-24T10:54:03+00:00",
+   "mislabelled": [],
    "commit": "2aa4cc14f251e4a780e94e200aed6b36a5b15c21",
    "summary": {
     "blocked": 4,
@@ -93,6 +99,70 @@
    },
    "false_positives": [
     "dockerized_labs/a9_uckv_lab/app.py:89: Image.open on an upload object; the documented issue is a vulnerable Pillow version, not path traversal"
+   ]
+  },
+  "appsecco/dvna": {
+   "holdout": "holdout2",
+   "frozen_at": "2026-11-24T11:05:00+00:00",
+   "mislabelled": [
+    "D2"
+   ],
+   "commit": "9ba473add536f66ac9007966acb2a775dd31277a",
+   "summary": {
+    "blocked": 3,
+    "fail": 6,
+    "not_applicable": 39,
+    "not_performed": 7,
+    "unknown": 6,
+    "unsupported": 5
+   },
+   "resources": {
+    "wall_seconds": 0.66,
+    "max_child_rss_kib": 23836,
+    "exit": 0
+   },
+   "recall_documented": {
+    "tp": 2,
+    "n": 19,
+    "value": 0.105
+   },
+   "recall_modelled": {
+    "tp": 1,
+    "n": 7,
+    "value": 0.143
+   },
+   "unverified": [],
+   "false_negatives": [
+    "D1",
+    "D4",
+    "D5",
+    "D6",
+    "D7",
+    "D8",
+    "D9",
+    "D10",
+    "D11",
+    "D12",
+    "D13",
+    "D14",
+    "D15",
+    "D16",
+    "D17",
+    "D19"
+   ],
+   "precision_reviewed_sample": {
+    "tp": 3,
+    "n": 10,
+    "value": 0.3
+   },
+   "false_positives": [
+    "routes/main.js POST /forgotpw: password-reset request is public by design; 'forgotpw' not matched by the public-route rule",
+    "core/appHandler.js:85: Sequelize find({where}) is parameterised SQL, not a NoSQL query",
+    "core/appHandler.js:107: Sequelize find({where})",
+    "core/appHandler.js:145: Sequelize find({where})",
+    "core/authHandler.js:21: Sequelize find({where})",
+    "core/authHandler.js:43: Sequelize find({where})",
+    "core/authHandler.js:72: Sequelize find({where})"
    ]
   }
  },

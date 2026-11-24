@@ -6,13 +6,14 @@ from osb_engine.assurance import DOMAINS
 from osb_engine.controls import catalogue
 
 ev = Path(sys.argv[1] if len(sys.argv) > 1 else "evidence/s05")
-truth = json.loads((ev / "holdout_ground_truth.json").read_text())
-verdicts = json.loads((ev / "holdout_verdicts.json").read_text())
 report = {"stage": "S05", "certified": False, "projects": {}, "coverage": {}, "blockers": []}
-for project, spec in truth["projects"].items():
+for prefix in ("holdout", "holdout2"):
+  truth = json.loads((ev / f"{prefix}_ground_truth.json").read_text())
+  verdicts = json.loads((ev / f"{prefix}_verdicts.json").read_text())
+  for project, spec in truth["projects"].items():
     name = project.split("/")[1]
-    out = json.loads((ev / f"holdout_{name}.assure.json").read_text())["assurance"]
-    res = json.loads((ev / f"holdout_{name}.resources.json").read_text())
+    out = json.loads((ev / f"{prefix}_{name}.assure.json").read_text())["assurance"]
+    res = json.loads((ev / f"{prefix}_{name}.resources.json").read_text())
     ids = [d["id"] for d in spec["defects"]]
     got = {i: verdicts["detections"][i] for i in ids}
     modelled = [d["id"] for d in spec["defects"] if d["modelled"]]
@@ -20,6 +21,7 @@ for project, spec in truth["projects"].items():
     findings = [f for f in verdicts["reported_security_findings"] if f["project"] == name]
     ftp = sum(f["verdict"] == "TP" for f in findings)
     report["projects"][project] = {
+        "holdout": prefix, "frozen_at": truth["frozen_at"], "mislabelled": [i for i, v in got.items() if v == "mislabelled"],
         "commit": spec["commit"], "summary": out["summary"], "resources": res,
         "recall_documented": {"tp": tp, "n": len(ids), "value": round(tp / len(ids), 3)},
         "recall_modelled": {"tp": sum(got[i] == "TP" for i in modelled), "n": len(modelled),

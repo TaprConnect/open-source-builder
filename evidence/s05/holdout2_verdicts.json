@@ -1,0 +1,16 @@
+{"reviewer": "implementing agent (not independent); each verdict cites the inspected line",
+ "detections": {"D1": "FN", "D2": "mislabelled", "D3": "TP", "D4": "FN", "D5": "FN", "D6": "FN", "D7": "FN", "D8": "FN",
+                "D9": "FN", "D10": "FN", "D11": "FN", "D12": "FN", "D13": "FN", "D14": "FN", "D15": "FN", "D16": "FN",
+                "D17": "FN", "D18": "TP", "D19": "FN"},
+ "reported_security_findings": [
+  {"project": "dvna", "domain": "Identity", "where": "routes/main.js POST /forgotpw", "verdict": "FP", "why": "password-reset request is public by design; 'forgotpw' not matched by the public-route rule"},
+  {"project": "dvna", "domain": "Identity", "where": "routes/main.js POST /resetpw", "verdict": "TP", "why": "documented insecure password reset (D3)"},
+  {"project": "dvna", "domain": "WebDefences", "where": "core/appHandler.js:39", "verdict": "TP", "why": "exec('ping ' + req.body.address) is command injection (D2) but labelled sql_injection: require('child_process').exec alias not recognised"},
+  {"project": "dvna", "domain": "WebDefences", "where": "core/appHandler.js:85", "verdict": "FP", "why": "Sequelize find({where}) is parameterised SQL, not a NoSQL query"},
+  {"project": "dvna", "domain": "WebDefences", "where": "core/appHandler.js:107", "verdict": "FP", "why": "Sequelize find({where})"},
+  {"project": "dvna", "domain": "WebDefences", "where": "core/appHandler.js:145", "verdict": "FP", "why": "Sequelize find({where})"},
+  {"project": "dvna", "domain": "WebDefences", "where": "core/appHandler.js:188", "verdict": "TP", "why": "res.redirect(req.query.url) unvalidated redirect (D18)"},
+  {"project": "dvna", "domain": "WebDefences", "where": "core/authHandler.js:21", "verdict": "FP", "why": "Sequelize find({where})"},
+  {"project": "dvna", "domain": "WebDefences", "where": "core/authHandler.js:43", "verdict": "FP", "why": "Sequelize find({where})"},
+  {"project": "dvna", "domain": "WebDefences", "where": "core/authHandler.js:72", "verdict": "FP", "why": "Sequelize find({where})"}],
+ "not_reviewed": "Persistence, Quality, Configuration and SupplyChain findings were not individually verified"}

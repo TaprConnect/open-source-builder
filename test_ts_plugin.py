@@ -137,3 +137,19 @@ class PostHoldoutPatterns(unittest.TestCase):
     def test_query_builder_exec_is_not_a_shell(self):
         facts = plugins.extract("javascript", b'app.get("/b", (req, res) => { Todo.find({}).exec(function () { res.send(req.query.q); }); });\n', "b.js")["facts"]
         self.assertEqual(facts["taint"], [])
+
+
+class PrecisionRound2(unittest.TestCase):
+    """Fixes measured on holdout 2 (appsecco/dvna); not holdout evidence."""
+
+    def test_member_alias_of_child_process(self):
+        facts = plugins.extract("javascript", b"var exec = require('child_process').exec;\n"
+                                b"module.exports.ping = function (req, res) { exec('ping ' + req.body.address); };\n", "h.js")["facts"]
+        self.assertEqual([t["kind"] for t in facts["taint"]], ["command_injection"])
+
+    def test_nosql_only_with_a_mongo_driver(self):
+        handler = b"exports.find = function (req, res) { db.User.find({ where: { login: req.body.login } }); };\n"
+        sql = build_index(repo_with({"package.json": b'{"dependencies": {"sequelize": "6"}}', "h.js": handler}))
+        self.assertEqual(sql["taint"], [])
+        mongo = build_index(repo_with({"package.json": b'{"dependencies": {"mongoose": "6"}}', "h.js": handler}))
+        self.assertEqual([t["kind"] for t in mongo["taint"]], ["nosql_injection"])

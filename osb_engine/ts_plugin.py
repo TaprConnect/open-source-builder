@@ -210,8 +210,12 @@ def _facts(path, root, source):
     for n in _walk(root, budget):
         if n.type == "variable_declarator":
             value, target = n.child_by_field_name("value"), n.child_by_field_name("name")
-            if value is not None and value.type == "call_expression" and _callee(value.child_by_field_name("function"), source) == "require" \
-                    and "child_process" in _text(value, source) and target is not None:
+            required = value
+            while required is not None and required.type == "member_expression":  # require("child_process").exec
+                required = required.child_by_field_name("object")
+            if required is not None and required.type == "call_expression" \
+                    and _callee(required.child_by_field_name("function"), source) == "require" \
+                    and "child_process" in _text(required, source) and target is not None:
                 shell_aliases.update(_text(i, source) for i in _walk(target, budget)
                                      if i.type in ("identifier", "shorthand_property_identifier_pattern"))
         elif n.type == "import_statement" and "child_process" in _text(n, source):

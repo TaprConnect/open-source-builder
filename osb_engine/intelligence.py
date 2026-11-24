@@ -395,6 +395,12 @@ def build_index(repo, extractor=None, max_files=200_000, max_total_bytes=512 * 1
             environment.setdefault(name, []).append(f["path"])
         issues += [{"path": f["path"], **i} for i in facts.get("issues", [])]
         taint += [{"file": f["path"], **x} for x in facts.get("taint", [])]
+    # NoSQL injection only where a MongoDB driver is in use; SQL ORMs also take query objects.
+    mongo = {"mongoose", "mongodb", "monk", "mongojs", "pymongo", "motor", "mongoengine"}
+    uses_mongo = bool(mongo & ({d.lower() for f in files for d in (f.get("facts") or {}).get("dependencies", [])
+                                if isinstance(d, str)} | {e.lower() for e in external}))
+    if not uses_mongo:
+        taint = [t for t in taint if t["kind"] != "nosql_injection"]
     credentials, required, declared_env = [], [], set()
     for f in files:
         facts = f.get("facts", {})

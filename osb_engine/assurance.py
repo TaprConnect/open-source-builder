@@ -294,13 +294,22 @@ def _network(index):
         {"file": t["file"], "line": t["line"], "detail": t["kind"]} for t in index.get("taint", []) if t["kind"] == "ssrf"]
 
 
-_PUBLIC_AUTH = __import__("re").compile(r"/(log_?in|sign_?in|sign_?up|register|log_?out|sign_?out|token|oauth|"
-                                        r"password|forgot|reset|verify|callback|health|status)\b", __import__("re").I)
+_PUBLIC_AUTH = __import__("re").compile(r"/((log_?in|sign_?in|sign_?up|register|log_?out|sign_?out|token|oauth|"
+                                        r"verify|callback|health|status)\b|(forgot|reset|recover)[\w-]*|[\w-]*password)",
+                                        __import__("re").I)
+_PRIVATE_READ = __import__("re").compile(r"/(admin|users?|accounts?|profiles?|me|orders?|billing|invoices?|settings)(/|$|\b)",
+                                         __import__("re").I)
 
 
 def _identity(index):
     applicable, hits = EVALUATORS["Identity"](index)
-    return applicable, [h for h in hits if not _PUBLIC_AUTH.search(h["route"].split(" ", 1)[-1])]
+    hits = [h for h in hits if not _PUBLIC_AUTH.search(h["route"].split(" ", 1)[-1])]
+    reads = [{"file": c["file"], "route": f"{'/'.join(c['methods'])} {c['path']}",
+              "detail": "read route for admin or personal data without authentication evidence"}
+             for c in index.get("completeness", []) if c["auth"] == "not_detected"
+             and not set(c["methods"]) & {"POST", "PUT", "PATCH", "DELETE"} and _PRIVATE_READ.search(c["path"])
+             and not _PUBLIC_AUTH.search(c["path"])]
+    return applicable or bool(reads), hits + reads
 
 
 _NO_WRITE = __import__("re").compile(r"/(log_?in|sign_?in|log_?out|sign_?out|token|verify|health|status|callback|search)\b",

@@ -115,3 +115,15 @@ class AssuranceEngine(unittest.TestCase):
         for c in controls.values():
             if c["state"] == "unsupported":
                 self.assertTrue(c["reason"])
+
+
+class IdentityRound2(unittest.TestCase):
+    def test_public_recovery_routes_and_private_reads(self):
+        from osb_engine.assurance import _identity
+        index = {"completeness": [
+            {"file": "a.js", "methods": ["POST"], "path": "/forgotpw", "auth": "not_detected", "flags": [], "handler": "h"},
+            {"file": "a.js", "methods": ["POST"], "path": "/notes", "auth": "not_detected", "flags": [], "handler": "h"},
+            {"file": "a.js", "methods": ["GET"], "path": "/admin/usersapi", "auth": "not_detected", "flags": [], "handler": "h"},
+            {"file": "a.js", "methods": ["GET"], "path": "/products", "auth": "not_detected", "flags": [], "handler": "h"}]}
+        _, hits = _identity(index)
+        self.assertEqual(sorted(h["route"] for h in hits), ["GET /admin/usersapi", "POST /notes"])

@@ -24,6 +24,10 @@ jobs:
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           fi
           python3 --version
+          # pyproject.toml declares setuptools>=61 (PEP 621); 22.04's system setuptools predates it.
+          if ! python3 -c "import setuptools,sys;sys.exit(int(setuptools.__version__.split('.')[0])<61)"; then
+            sudo python3 -m pip install -q 'setuptools>=61'
+          fi
           bwrap --unshare-all --die-with-parent --ro-bind / / true
       - name: Unit tests
         run: python3 -m unittest discover -v 2>&1 | tee "$RUNNER_TEMP/unit.log"; exit "${PIPESTATUS[0]}"

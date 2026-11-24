@@ -366,14 +366,58 @@ def _json(data):
     return {"state": "SYMBOL_INDEXED" if keys else "PARSED", "facts": {"keys": [str(k) for k in keys]}}
 
 
+_TOML_STRING = __import__("re").compile(r'"(?:[^"\\\n]|\\.)*"|\'[^\'\n]*\'')
+_TOML_HEADER = __import__("re").compile(r"^\s*\[\[?\s*([^\[\]]+?)\s*\]\]?\s*(?:#.*)?$")
+_TOML_KEY = __import__("re").compile(r"^\s*([A-Za-z0-9_.\- ]+?)\s*=\s*(.*)$")
+_SUBSET_REASON = "TOML subset parser (tomllib requires Python 3.11+): table names, keys and string arrays only"
+
+
+def _toml_subset(text):
+    """Python 3.10 fallback: top-level names and string-array values; never raises on bad input."""
+    keys, arrays, table, key, buffer = set(), {}, (), None, ""
+    for line in text.splitlines():
+        if key is None:
+            header = _TOML_HEADER.match(line)
+            if header:
+                table = tuple(part.strip().strip("\"'") for part in header.group(1).split("."))
+                keys.add(table[0])
+                continue
+            match = _TOML_KEY.match(line)
+            if not match:
+                continue
+            path = table + tuple(part.strip() for part in match.group(1).split("."))
+            keys.add(path[0])
+            if not match.group(2).lstrip().startswith("["):
+                continue
+            key, line = path, match.group(2)
+        buffer += line + "\n"
+        bare = _TOML_STRING.sub('""', buffer).split("\n")
+        depth = sum(part.split("#", 1)[0].count("[") - part.split("#", 1)[0].count("]") for part in bare)
+        if depth <= 0:
+            values = []
+            for token in _TOML_STRING.findall(buffer):
+                try:
+                    values.append(json.loads(token) if token.startswith('"') else token[1:-1])
+                except ValueError:
+                    continue
+            arrays[key] = values
+            key, buffer = None, ""
+    return keys, arrays
+
+
 def _toml(data):
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        return {"state": "INDEXED", "error": f"invalid TOML: {exc}"[:300]}
     try:
         import tomllib
     except ImportError:
-        return {"state": "INDEXED", "reason": "unsupported: tomllib requires Python 3.11+"}
+        keys, _ = _toml_subset(text)
+        return {"state": "PARSED", "reason": _SUBSET_REASON, "facts": {"keys": sorted(keys)[:_LIMIT]}}
     try:
-        value = tomllib.loads(data.decode("utf-8"))
-    except (ValueError, UnicodeDecodeError) as exc:
+        value = tomllib.loads(text)
+    except ValueError as exc:
         return {"state": "INDEXED", "error": f"invalid TOML: {exc}"[:300]}
     return {"state": "SYMBOL_INDEXED", "facts": {"keys": sorted(value)[:_LIMIT]}}
 
@@ -392,9 +436,18 @@ def _names(requirements):
 
 def _pyproject(data):
     result = _toml(data)
-    if result["state"] != "SYMBOL_INDEXED":
+    if result["state"] == "INDEXED":
         return result
-    import tomllib
+    try:
+        import tomllib
+    except ImportError:
+        _, arrays = _toml_subset(data.decode("utf-8"))
+        declared = list(arrays.get(("project", "dependencies"), []))
+        for path, group in sorted(arrays.items()):
+            if len(path) == 3 and path[:2] == ("project", "optional-dependencies"):
+                declared += group
+        result["facts"]["dependencies"] = _names(declared)
+        return result
     project = tomllib.loads(data.decode("utf-8")).get("project", {})
     declared = list(project.get("dependencies", []) if isinstance(project.get("dependencies"), list) else [])
     optional = project.get("optional-dependencies", {})
@@ -428,7 +481,8 @@ def _sql(data):
             conn.executescript(data.decode("utf-8"))
         except (sqlite3.Error, UnicodeDecodeError, ValueError) as exc:
             return {"state": "INDEXED", "error": f"SQL not understood by SQLite: {exc}"[:300]}
-        conn.set_authorizer(None)
+        # set_authorizer(None) only clears the hook from Python 3.11; allow reads explicitly instead.
+        conn.set_authorizer(lambda *_: sqlite3.SQLITE_OK)
         tables = []
         for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"):
             columns = [row[1] for row in conn.execute(f'PRAGMA table_info("{name}")')]

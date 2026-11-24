@@ -3,7 +3,7 @@
 Read `DIRECTIVE_S05_S07.md` (requirements) and `registry.json` (status per requirement) first.
 
 - Branch: `claude/sleepy-knuth-12w5sr` (session branch; only branch this agent may push).
-- CI green at 6925e0f (run 45381212027, both Ubuntu jobs incl. frozen suite); 5941ecb green (run 45380646717).
+- CI green at d94387a (run 45385552687, both Ubuntu jobs incl. frozen suite).
 - Blocker B1 resolved by owner-approved v2 scripts (tests/acceptance/manifest.json superseded_by).
 - No worktrees in use. External reference repos are cloned only in the session scratchpad (untrusted).
 

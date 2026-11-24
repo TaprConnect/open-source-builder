@@ -34,7 +34,7 @@ def valid_facts(result):
     if not isinstance(facts, dict):
         return False
     known = {"definitions", "imports", "references", "exports", "main_guard", "keys", "tables", "dependencies",
-             "routes", "env", "issues", "functions", "taint", "env_required", "credentials"}
+             "routes", "env", "issues", "functions", "taint", "env_required", "credentials", "fetches", "a11y"}
     if set(facts) - known:
         return False
     for r in facts.get("env_required", []):
@@ -55,6 +55,14 @@ def valid_facts(result):
     for r in facts.get("routes", []):
         if not (isinstance(r, dict) and set(r) == {"path", "methods", "function", "line"} and _text(r["path"])
                 and _texts(r["methods"]) and _text(r["function"]) and _count(r["line"])):
+            return False
+    for f in facts.get("a11y", []):
+        if not (isinstance(f, dict) and set(f) == {"kind", "line"} and _count(f["line"])
+                and f["kind"] in ("img_missing_alt", "click_without_keyboard")):
+            return False
+    for f in facts.get("fetches", []):
+        if not (isinstance(f, dict) and set(f) == {"path", "method", "line"} and _text(f["path"])
+                and _text(f["method"]) and _count(f["line"])):
             return False
     for f in facts.get("taint", []):
         if not (isinstance(f, dict) and set(f) == {"kind", "function", "line"} and _text(f["function"]) and _count(f["line"])
@@ -124,6 +132,92 @@ _PERSISTENCE = {"execute", "executemany", "commit", "add", "add_all", "save", "i
                 "update_one", "put_item", "bulk_write", "connect"}
 
 
+_JS = ("typescript", "javascript")
+_JS_SUFFIXES = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
+_PERSISTENCE_JS = {"create", "createMany", "update", "updateMany", "upsert", "delete", "deleteMany", "query",
+                   "insert", "insertOne", "insertMany", "updateOne", "save", "execute", "run", "$executeRaw",
+                   "findOneAndUpdate", "bulkWrite", "commit"}
+_NODE_BUILTINS = {"assert", "buffer", "child_process", "cluster", "crypto", "dns", "events", "fs", "http", "https",
+                  "net", "os", "path", "querystring", "readline", "stream", "string_decoder", "timers", "tls",
+                  "url", "util", "vm", "worker_threads", "zlib", "process", "perf_hooks", "async_hooks"}
+
+
+def _js_root(spec):
+    if spec.startswith("node:"):
+        return spec, "stdlib"
+    parts = spec.split("/")
+    root = "/".join(parts[:2]) if spec.startswith("@") else parts[0]
+    return root, "stdlib" if root in _NODE_BUILTINS else None
+
+
+def _js_edges(scripts, paths, declared, classified, missing, external):
+    """Resolve relative imports to repository files; classify packages against package.json."""
+    edges = set()
+    for f in scripts:
+        if f["state"] not in ("SYMBOL_INDEXED", "PARSED"):
+            continue
+        base = f["path"].rsplit("/", 1)[0] if "/" in f["path"] else ""
+        unresolved = 0
+        for imp in f["facts"].get("imports", []):
+            spec = imp["module"]
+            if spec.startswith("."):
+                parts = [p for p in (base.split("/") if base else [])]
+                for seg in spec.split("/"):
+                    if seg == "..":
+                        parts = parts[:-1]
+                    elif seg not in (".", ""):
+                        parts.append(seg)
+                stem = "/".join(parts)
+                stem_no_ext = stem.rsplit(".", 1)[0] if stem.endswith(_JS_SUFFIXES) else stem
+                target = next((c for c in [stem] + [stem_no_ext + e for e in _JS_SUFFIXES]
+                               + [stem + "/index" + e for e in _JS_SUFFIXES] if c in paths), None)
+                if target:
+                    edges.add((f["path"], target))
+                else:
+                    unresolved += 1
+                continue
+            root, kind = _js_root(spec)
+            external.add(root)
+            classified[root] = kind or ("declared" if root in declared or root.lower() in declared else "undeclared")
+            if classified[root] == "undeclared":
+                missing.setdefault(root, set()).add(f["path"])
+                unresolved += 1
+        if unresolved == 0 and f["state"] == "SYMBOL_INDEXED":
+            f["state"] = "DEPENDENCIES_RESOLVED"
+    return edges
+
+
+def _pattern(path):
+    import re as _re
+    return _re.compile("^" + _re.sub(r"(:[A-Za-z_]\w*|\[[^\]/]+\]|\{[^}/]+\})", "[^/]+",
+                                     _re.escape(path).replace(r"\:", ":").replace(r"\[", "[").replace(r"\]", "]")
+                                     .replace(r"\{", "{").replace(r"\}", "}")).rstrip("/") + "/?$")
+
+
+def _link_fetches(scripts, routes):
+    links, unmatched = [], []
+    compiled = [(r, _pattern(r["path"])) for r in routes]
+    for f in scripts:
+        for fetch in f["facts"].get("fetches", []):
+            target = fetch["path"].replace(":param", "x")
+            hit = next((r for r, rx in compiled if rx.match(target) and (fetch["method"] in r["methods"] or "ANY" in r["methods"])), None)
+            record = {"file": f["path"], "line": fetch["line"], "method": fetch["method"], "path": fetch["path"]}
+            if hit:
+                links.append({**record, "route_file": hit["file"], "route": hit["path"]})
+            else:
+                unmatched.append(record)
+    return links, unmatched
+
+
+def _frontend_state(files):
+    js = [f for f in files if f["language"] in _JS]
+    if not js:
+        return "not_applicable: no TypeScript/JavaScript sources"
+    if any("tree-sitter" in f.get("reason", "") for f in js):
+        return "unsupported: tree-sitter TypeScript/JavaScript parser not installed"
+    return "static: tree-sitter facts; UI-to-API links matched by literal path and method"
+
+
 def _module_name(path):
     name = path[:-3].replace("/", ".")
     return name[:-9] if name.endswith(".__init__") else name
@@ -190,7 +284,7 @@ def _cycles(nodes, edges):
 
 def build_index(repo, extractor=None):
     """Index the pinned revision. extractor(items) -> {key: result}; None means in-process."""
-    run = extractor or (lambda items: {k: plugins.extract(kind, data) for k, kind, data in items})
+    run = extractor or (lambda items: {k: plugins.extract(kind, data, k) for k, kind, data in items})
     blobs, items = [], []
     for blob in repo.inventory():
         kind = plugins.language(blob.path)
@@ -239,6 +333,9 @@ def build_index(repo, extractor=None):
         if unresolved == 0:
             entry["state"] = "DEPENDENCIES_RESOLVED"
     python = [f for f in files if f["language"] == "python" and "facts" in f]
+    scripts = [f for f in files if f["language"] in _JS and "facts" in f]
+    js_edges = _js_edges(scripts, {f["path"] for f in files}, declared, classified, missing, external)
+    edges.update(js_edges)
     entry_points = sorted(f["path"] for f in python
                           if f["path"].endswith("__main__.py") or f["facts"].get("main_guard"))
     referenced = set()
@@ -257,7 +354,7 @@ def build_index(repo, extractor=None):
             dead.append({"path": f["path"], "symbol": name, "kind": d["kind"], "line": d["line"],
                          "confidence": "candidate", "note": "no static reference in this repository"})
     routes, environment, issues, taint = [], {}, [], []
-    for f in python:
+    for f in python + scripts:
         facts = f["facts"]
         routes += [{**r, "file": f["path"]} for r in facts.get("routes", [])]
         for name in facts.get("env", []):
@@ -274,7 +371,8 @@ def build_index(repo, extractor=None):
 
     def is_test(path):
         base = path.rsplit("/", 1)[-1]
-        return base.startswith("test_") or base.endswith("_test.py") or path.startswith("tests/") or "/tests/" in path
+        return base.startswith("test_") or base.endswith("_test.py") or path.startswith("tests/") or "/tests/" in path \
+            or ".test." in base or ".spec." in base or "/__tests__/" in "/" + path
     tests = {}
     for a, b in edges:
         if is_test(a) and not is_test(b):
@@ -282,7 +380,7 @@ def build_index(repo, extractor=None):
     untested = sorted(f["path"] for f in python if not is_test(f["path"]) and not f["path"].endswith("__init__.py")
                       and f["path"] not in tests)
     dead = [d for d in dead if not (is_test(d["path"]) and (d["symbol"].startswith("test") or d["symbol"].startswith("Test")))]
-    by_path = {f["path"]: f["facts"] for f in python}
+    by_path = {f["path"]: f["facts"] for f in python + scripts}
     imports_of = {}
     for a, b in sorted(edges):
         imports_of.setdefault(a, []).append(b)
@@ -313,16 +411,20 @@ def build_index(repo, extractor=None):
         if any(i["function"] == route["function"] and i["kind"] in ("placeholder", "not_implemented")
                for i in facts.get("issues", [])):
             flags.append("unimplemented")
-        elif set(route["methods"]) & {"POST", "PUT", "PATCH", "DELETE", "ANY"} - {"ANY"} and not calls & _PERSISTENCE:
+        elif set(route["methods"]) & {"POST", "PUT", "PATCH", "DELETE", "ANY"} - {"ANY"} and not calls & (
+                _PERSISTENCE_JS if route["file"].endswith(_JS_SUFFIXES) else _PERSISTENCE):
             flags.append("in_memory_persistence" if mutates else "no_persistence")
         if route["file"] not in tests:
             flags.append("untested")
         completeness.append({"path": route["path"], "methods": route["methods"], "handler": route["function"],
                              "file": route["file"], "flags": flags, "auth": auth,
-                             "evidence": {"persistence_calls": sorted(calls & _PERSISTENCE), "mutated_state": sorted(mutates)}})
+                             "evidence": {"persistence_calls": sorted(calls & (_PERSISTENCE_JS if route["file"].endswith(_JS_SUFFIXES) else _PERSISTENCE)),
+                                          "mutated_state": sorted(mutates)}})
+    frontend_links, unmatched_fetches = _link_fetches(scripts, routes)
+    accessibility = [{"file": f["path"], **x} for f in scripts for x in f["facts"].get("a11y", [])]
     for f in files:
         facts = f.get("facts", {})
-        if f["language"] == "python" and facts:
+        if f["language"] in ("python",) + _JS and facts:
             f["facts"] = {"definitions": len(facts.get("definitions", [])), "imports": len(facts.get("imports", []))}
     states = {}
     for f in files:
@@ -337,7 +439,8 @@ def build_index(repo, extractor=None):
             "completeness_summary": {"routes": len(completeness),
                                      "flagged": sum(1 for c in completeness if c["flags"]),
                                      "auth_not_detected": sum(1 for c in completeness if c["auth"] == "not_detected"),
-                                     "frontend_analysis": "unsupported: no TypeScript/JavaScript parser available, so UI-to-API links are not analysed"},
+                                     "frontend_analysis": _frontend_state(files)},
+            "frontend_links": frontend_links, "unmatched_fetches": unmatched_fetches, "accessibility": accessibility,
             "environment": {k: sorted(set(v)) for k, v in sorted(environment.items())},
             "issues": sorted(issues, key=lambda i: (i["path"], i["line"], i["kind"])),
             "taint": sorted(taint, key=lambda x: (x["file"], x["line"], x["kind"])),

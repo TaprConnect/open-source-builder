@@ -213,6 +213,17 @@ def _main(argv):
     controls_parser.add_argument('--analysis-cpu', type=int, default=10)
     controls_parser.add_argument('--analysis-memory', type=int, default=512)
     controls_parser.add_argument('--analysis-budget', type=int, default=1800)
+    assure_parser = sub.add_parser('assure', description='Evaluate every catalogue control with static, runtime and external evidence (S05).')
+    assure_parser.add_argument('repository')
+    assure_parser.add_argument('database')
+    assure_parser.add_argument('--catalogue', default=str(Path(__file__).resolve().parent/'profiles'/'checks.tsv'))
+    assure_parser.add_argument('--trusted-target', action='store_true')
+    assure_parser.add_argument('--runtime', action='store_true', help='run discovered project commands in isolation')
+    assure_parser.add_argument('--acceptance', help='private JSON list of external verification records')
+    assure_parser.add_argument('--budget', type=float, default=60.0)
+    assure_parser.add_argument('--analysis-cpu', type=int, default=10)
+    assure_parser.add_argument('--analysis-memory', type=int, default=512)
+    assure_parser.add_argument('--analysis-budget', type=int, default=1800)
     cancel_parser = sub.add_parser('cancel', description='Trusted supervisor only. Cancels a task (terminal).')
     for field in ('repository', 'database', 'run_id', 'task_id'):
         cancel_parser.add_argument(field)
@@ -314,7 +325,7 @@ def _main(argv):
                         raise ValueError('inputs must be NAME=PATH')
                     output = run_worker(store, a.run_id, a.task_id, a.generation, token,
                                         a.outbox, worker_argv, inputs, a.timeout)
-                elif a.command in ('index', 'controls'):
+                elif a.command in ('index', 'controls', 'assure'):
                     if isolation_available():
                         extractor = isolated_map(repo.root, plugins_module, 'extract', valid_facts, a.analysis_cpu,
                                                  a.analysis_memory, budget_seconds=a.analysis_budget)
@@ -326,6 +337,15 @@ def _main(argv):
                     output = build_index(repo, extractor)
                     if a.command == 'controls':
                         output = evaluate_controls(catalogue(a.catalogue), output)
+                    elif a.command == 'assure':
+                        from . import assurance, runtime as runtime_adapters
+                        trusted = a.trusted_target or os.environ.get('OSB_TRUSTED_TARGETS') == '1'
+                        observed = runtime_adapters.run(repo, output, trusted=trusted) if a.runtime else None
+                        records = json.loads(Path(a.acceptance).read_bytes()) if a.acceptance else []
+                        if not isinstance(records, list):
+                            raise ValueError('acceptance records must be a JSON list')
+                        output = {'assurance': assurance.evaluate(catalogue(a.catalogue), output, observed, records, a.budget),
+                                  'runtime': observed}
                 elif a.command == 'cancel':
                     output = store.cancel(a.run_id, a.task_id, a.reason)
                 elif a.command == 'export-plan':

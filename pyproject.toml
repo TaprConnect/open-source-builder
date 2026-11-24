@@ -10,6 +10,12 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []
 
+[project.optional-dependencies]
+# Real TypeScript/JavaScript parsing (S05-009); without it TS/JS files are reported unsupported.
+typescript = ["tree-sitter>=0.23,<0.28", "tree-sitter-typescript>=0.23,<0.24", "tree-sitter-javascript>=0.23,<0.26"]
+# Standards-compliant TOML on Python 3.10 (tomllib is stdlib from 3.11).
+toml = ["tomli>=1.1; python_version < '3.11'"]
+
 [project.scripts]
 osb = "osb_engine.__main__:main"
 

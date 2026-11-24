@@ -23,7 +23,7 @@ import analysis
 request = json.loads(sys.stdin.buffer.read())
 results = {}
 for key, kind, data in request["items"]:
-    results[key] = analysis.analyse(kind, base64.b64decode(data))
+    results[key] = analysis.analyse(kind, base64.b64decode(data), *([key] if getattr(analysis, "PATH_AWARE", False) else []))
 sys.stdout.write(json.dumps({"version": analysis.VERSION, "results": results}))
 """
 _MAX_RESULT = 8 * 1024 * 1024
@@ -98,7 +98,8 @@ def isolated_map(root, module, function, validator, cpu_seconds=10, memory_mib=5
         key = item[0]
         with tempfile.TemporaryDirectory() as tmp:
             inputs = {}
-            for filename, data in (("entry.py", entry), (name + ".py", source)):
+            companions = [(Path(m.__file__).name, Path(m.__file__).read_bytes()) for m in getattr(module, "COMPANIONS", ())]
+            for filename, data in [("entry.py", entry), (name + ".py", source)] + companions:
                 inputs[filename] = os.path.join(tmp, filename)
                 with open(inputs[filename], "wb") as handle:
                     handle.write(data)

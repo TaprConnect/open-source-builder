@@ -62,6 +62,8 @@ def _command(root, outbox, inputs, argv, env=None):
             cmd += ["--symlink", os.readlink(host), "/" + name]
         elif host.is_dir():
             cmd += ["--ro-bind", str(host), "/" + name]
+    # Debian-family hosts resolve /usr/bin/python3 through /etc/alternatives (symlinks only).
+    cmd += ["--ro-bind-try", "/etc/alternatives", "/etc/alternatives"]
     cmd += ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
             ] + ([] if root is None else ["--ro-bind", str(root), "/work"])
     if outbox is not None:

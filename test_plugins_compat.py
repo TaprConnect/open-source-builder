@@ -49,3 +49,47 @@ class PluginCompatibility(unittest.TestCase):
         with without_tomllib():
             for data in (b"[", b'a = [\n"x', b'x = """\n[project]\n"""', b"\xff"):
                 self.assertIn(plugins._pyproject(data)["state"], ("INDEXED", "PARSED", "SYMBOL_INDEXED"))
+
+
+def without_toml_parsers():
+    real = builtins.__import__
+
+    def fake(name, *args, **kwargs):
+        if name in ("tomllib", "tomli"):
+            raise ImportError(name)
+        return real(name, *args, **kwargs)
+    return mock.patch.object(builtins, "__import__", fake)
+
+
+class TomlSubsetIntegrity(unittest.TestCase):
+    """S05-010: the last-resort subset parser must not invent dependencies."""
+
+    def deps(self, data):
+        with without_toml_parsers():
+            result = plugins._pyproject(data)
+        self.assertEqual(result["state"], "PARSED")
+        self.assertIn("partial", result["reason"])
+        return result["facts"]["dependencies"]
+
+    def test_multiline_strings_are_not_syntax(self):
+        data = (b'[project]\nname = "x"\ndescription = """\n[project]\ndependencies = ["evil"]\n"""\n'
+                b'dependencies = ["real"]\n')
+        self.assertEqual(self.deps(data), ["real"])
+
+    def test_literal_multiline_and_quoted_hash(self):
+        data = b"[project]\nreadme = '''\ndependencies = ['nope']\n'''\ndependencies = [\"a # not a comment\", # c\n  'b']\n"
+        self.assertEqual(self.deps(data), ["a", "b"])
+
+    def test_other_tables_and_unterminated_input(self):
+        self.assertEqual(self.deps(b'[tool.poetry]\ndependencies = ["no"]\n[project]\n'), [])
+        self.assertEqual(self.deps(b'[project]\ndependencies = [\n"x"\n'), [])
+
+    def test_maintained_parser_preferred(self):
+        try:
+            import tomli  # noqa: F401
+        except ImportError:
+            tomli = None
+        result = plugins._pyproject(PYPROJECT)
+        if plugins._toml_parser() is not None:
+            self.assertEqual(result["state"], "SYMBOL_INDEXED")
+            self.assertNotIn("reason", result)

@@ -10,7 +10,13 @@ import json
 import re
 import sqlite3
 
-VERSION = "2"
+try:
+    from . import ts_plugin
+except ImportError:  # isolated child: companion modules sit beside this file
+    import ts_plugin
+
+VERSION = "3"
+PATH_AWARE = True  # the isolated child passes the repository path as a third argument
 _LIMIT = 5000
 
 
@@ -369,13 +375,24 @@ def _json(data):
 _TOML_STRING = __import__("re").compile(r'"(?:[^"\\\n]|\\.)*"|\'[^\'\n]*\'')
 _TOML_HEADER = __import__("re").compile(r"^\s*\[\[?\s*([^\[\]]+?)\s*\]\]?\s*(?:#.*)?$")
 _TOML_KEY = __import__("re").compile(r"^\s*([A-Za-z0-9_.\- ]+?)\s*=\s*(.*)$")
-_SUBSET_REASON = "TOML subset parser (tomllib requires Python 3.11+): table names, keys and string arrays only"
+_SUBSET_REASON = "partial: TOML subset parser (no tomllib or tomli): table names, keys and string arrays only"
 
 
 def _toml_subset(text):
     """Python 3.10 fallback: top-level names and string-array values; never raises on bad input."""
-    keys, arrays, table, key, buffer = set(), {}, (), None, ""
+    keys, arrays, table, key, buffer, fence = set(), {}, (), None, "", None
     for line in text.splitlines():
+        if fence is not None:  # inside a multiline string: its content is never TOML syntax
+            if line.count(fence) % 2 == 1:
+                fence = None
+            continue
+        opened = next((q for q in ('"""', "'''") if line.count(q) % 2 == 1), None)
+        if opened is not None and key is None:
+            fence = opened
+            match = _TOML_KEY.match(line)
+            if match:
+                keys.add((table + tuple(part.strip() for part in match.group(1).split(".")))[0])
+            continue
         if key is None:
             header = _TOML_HEADER.match(line)
             if header:
@@ -405,18 +422,27 @@ def _toml_subset(text):
     return keys, arrays
 
 
+def _toml_parser():
+    """Standards-compliant TOML: stdlib tomllib (3.11+) or the maintained tomli backport."""
+    for name in ("tomllib", "tomli"):
+        try:
+            return __import__(name)
+        except ImportError:
+            continue
+    return None
+
+
 def _toml(data):
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError as exc:
         return {"state": "INDEXED", "error": f"invalid TOML: {exc}"[:300]}
-    try:
-        import tomllib
-    except ImportError:
+    parser = _toml_parser()
+    if parser is None:
         keys, _ = _toml_subset(text)
         return {"state": "PARSED", "reason": _SUBSET_REASON, "facts": {"keys": sorted(keys)[:_LIMIT]}}
     try:
-        value = tomllib.loads(text)
+        value = parser.loads(text)
     except ValueError as exc:
         return {"state": "INDEXED", "error": f"invalid TOML: {exc}"[:300]}
     return {"state": "SYMBOL_INDEXED", "facts": {"keys": sorted(value)[:_LIMIT]}}
@@ -438,9 +464,8 @@ def _pyproject(data):
     result = _toml(data)
     if result["state"] == "INDEXED":
         return result
-    try:
-        import tomllib
-    except ImportError:
+    tomllib = _toml_parser()
+    if tomllib is None:
         _, arrays = _toml_subset(data.decode("utf-8"))
         declared = list(arrays.get(("project", "dependencies"), []))
         for path, group in sorted(arrays.items()):
@@ -523,7 +548,22 @@ def _dotenv(data, example=False):
     return {"state": "SYMBOL_INDEXED" if keys else "PARSED", "facts": facts}
 
 
-PLUGINS = {"python": _python, "json": _json, "toml": _toml, "sql": _sql, "pyproject": _pyproject,
+def _package_json(data):
+    """Declared npm dependencies (names only; version specifiers may carry URLs or tokens)."""
+    result = _json(data)
+    if result["state"] == "INDEXED":
+        return result
+    value = json.loads(data)
+    names = set()
+    for group in ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies"):
+        section = value.get(group) if isinstance(value, dict) else None
+        if isinstance(section, dict):
+            names.update(k for k in section if isinstance(k, str) and k)
+    result["facts"]["dependencies"] = sorted(names)[:_LIMIT]
+    return result
+
+
+PLUGINS = {"python": _python, "package_json": _package_json, "typescript": None, "javascript": None, "json": _json, "toml": _toml, "sql": _sql, "pyproject": _pyproject,
            "requirements": _requirements, "dotenv": _dotenv, "dotenv_example": lambda data: _dotenv(data, True)}
 _EXAMPLE_SUFFIXES = {"example", "sample", "template", "dist", "defaults"}
 EXTENSIONS = {".py": "python", ".json": "json", ".toml": "toml", ".sql": "sql",
@@ -534,6 +574,8 @@ def language(path):
     base = path.rsplit("/", 1)[-1].lower()
     if base == "pyproject.toml":
         return "pyproject"
+    if base == "package.json":
+        return "package_json"
     if base.startswith("requirements") and base.endswith(".txt"):
         return "requirements"
     if base == ".env" or base.startswith(".env."):
@@ -544,8 +586,13 @@ def language(path):
     return None
 
 
-def extract(kind, data):
+def extract(kind, data, path=""):
+    if kind in ("typescript", "javascript"):
+        return ts_plugin.extract(path or ("x.tsx" if kind == "typescript" else "x.js"), data)
     plugin = PLUGINS.get(kind)
     if plugin is None:
         return {"state": "INDEXED", "reason": f"unsupported: no parser available for {kind}"}
     return plugin(data)
+
+
+COMPANIONS = (ts_plugin,)

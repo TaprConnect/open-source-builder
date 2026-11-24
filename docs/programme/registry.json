@@ -56,17 +56,18 @@
    "notes": "tree-sitter TS/TSX/JS; SQL dialect classification. Frozen s04_001/s04_005 superseded by owner-approved v2 scripts. Unit tests written alongside implementation, not frozen before it."
   },
   "S05-010": {
-   "status": "in_progress",
+   "status": "implemented_unverified",
    "implementation": [
     "osb_engine/plugins.py",
     "osb_engine/ts_plugin.py"
    ],
    "tests": [
     "test_plugins_compat.py",
-    "test_ts_plugin.py"
+    "test_ts_plugin.py",
+    "test_resource_integrity.py"
    ],
    "evidence": [],
-   "notes": "tomli preferred; subset parser hardened and labelled partial; TS node budget. Aggregate resource exhaustion tests still outstanding."
+   "notes": "tomli preferred, subset parser labelled partial; per-file and aggregate file/byte budgets with explicit reasons; bounded plug-in output and TS traversal."
   },
   "S05-ACCEPT": {
    "status": "in_progress",
@@ -74,9 +75,10 @@
    "tests": [],
    "evidence": [
     "evidence/s05/report.json",
-    "evidence/s05/holdout_ground_truth.json"
+    "evidence/s05/holdout_ground_truth.json",
+    "evidence/s05/holdout2_ground_truth.json"
    ],
-   "notes": "Blind holdout measured, NOT certified: nodejs-goof 0/9, pygoat 3/12 documented defects; reviewed precision 10/12 overall. JS gaps: credentials, command-sink receivers, NoSQL/XSS/redirect/prototype pollution."
+   "notes": "Not certified. Holdout 1: nodejs-goof 0/9, pygoat 3/12. Holdout 2 (after JS fixes): dvna 2/19 (+1 mislabelled), reviewed precision 3/10. Next: ORM-aware NoSQL rule, require('child_process').exec alias, read-route Identity, then a third holdout."
   },
   "S06-001": {
    "status": "implemented_unverified",
@@ -239,5 +241,6 @@
    "id": "B1",
    "resolution": "Owner approved revised scripts s04_001v2/s04_005v2 on 2026-11-24; originals kept byte-exact and marked superseded in tests/acceptance/manifest.json."
   }
- ]
+ ],
+ "head": "see git log; last pushed commit recorded in HANDOVER.md"
 }

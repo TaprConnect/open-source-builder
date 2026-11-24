@@ -296,15 +296,27 @@ def _cycles(nodes, edges):
     return sorted(out)
 
 
-def build_index(repo, extractor=None):
-    """Index the pinned revision. extractor(items) -> {key: result}; None means in-process."""
+MAX_FILE_BYTES = 4 * 1024 * 1024
+
+
+def build_index(repo, extractor=None, max_files=200_000, max_total_bytes=512 * 1024 * 1024):
+    """Index the pinned revision. extractor(items) -> {key: result}; None means in-process.
+    Aggregate limits bound how many files and bytes are parsed; anything beyond them stays
+    INDEXED with an explicit reason instead of silently disappearing from coverage."""
     run = extractor or (lambda items: {k: plugins.extract(kind, data, k) for k, kind, data in items})
-    blobs, items, excluded = [], [], set()
+    blobs, items, excluded, limited = [], [], set(), {}
+    parsed_bytes = 0
     for blob in repo.inventory():
         kind = plugins.language(blob.path)
         blobs.append((blob, kind))
-        if kind in plugins.PLUGINS and blob.kind == "blob" and blob.mode in ("100644", "100755") \
-                and blob.size <= 4 * 1024 * 1024:
+        if kind in plugins.PLUGINS and blob.kind == "blob" and blob.mode in ("100644", "100755"):
+            if blob.size > MAX_FILE_BYTES:
+                limited[blob.path] = f"excluded: larger than the {MAX_FILE_BYTES // (1024 * 1024)} MiB per-file analysis limit"
+                continue
+            if len(items) >= max_files or parsed_bytes + blob.size > max_total_bytes:
+                limited[blob.path] = "excluded: aggregate analysis budget (files or bytes) exhausted"
+                continue
+            parsed_bytes += blob.size
             data = repo.read(blob)
             if kind in _JS and vendored(blob.path, data):
                 excluded.add(blob.path)
@@ -317,6 +329,8 @@ def build_index(repo, extractor=None):
         result = results.get(blob.path)
         if blob.path in excluded:
             entry["reason"] = "excluded: vendored or minified third-party code"
+        elif blob.path in limited:
+            entry["reason"] = limited[blob.path]
         elif kind is not None and kind not in plugins.PLUGINS:
             entry["reason"] = f"unsupported: no parser available for {kind}"
         elif kind is not None and blob.path in results and result is None:

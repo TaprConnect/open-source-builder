@@ -280,8 +280,7 @@ def _webhook(index):
 
 def _database(index):
     sql = [f for f in index["files"] if f["language"] == "sql"]
-    hits = [{"file": f["path"], "detail": f.get("error") or f.get("reason")} for f in sql
-            if f["state"] == "INDEXED" and (f.get("error") or f.get("reason"))]
+    hits = [{"file": f["path"], "detail": f["error"]} for f in sql if f["state"] == "INDEXED" and f.get("error")]
     return bool(_sql(index)[0]), hits
 
 
@@ -295,7 +294,25 @@ def _network(index):
         {"file": t["file"], "line": t["line"], "detail": t["kind"]} for t in index.get("taint", []) if t["kind"] == "ssrf"]
 
 
-STATIC = {**EVALUATORS, "Tenancy": _tenancy, "Frontend": _frontend_eval, "Contracts": _contracts,
+_PUBLIC_AUTH = __import__("re").compile(r"/(log_?in|sign_?in|sign_?up|register|log_?out|sign_?out|token|oauth|"
+                                        r"password|forgot|reset|verify|callback|health|status)\b", __import__("re").I)
+
+
+def _identity(index):
+    applicable, hits = EVALUATORS["Identity"](index)
+    return applicable, [h for h in hits if not _PUBLIC_AUTH.search(h["route"].split(" ", 1)[-1])]
+
+
+_NO_WRITE = __import__("re").compile(r"/(log_?in|sign_?in|log_?out|sign_?out|token|verify|health|status|callback|search)\b",
+                                     __import__("re").I)
+
+
+def _persistence(index):
+    applicable, hits = EVALUATORS["Persistence"](index)
+    return applicable, [h for h in hits if not _NO_WRITE.search(h["route"].split(" ", 1)[-1])]
+
+
+STATIC = {**EVALUATORS, "Identity": _identity, "Persistence": _persistence, "Tenancy": _tenancy, "Frontend": _frontend_eval, "Contracts": _contracts,
           "Accessibility": _accessibility, "Build": _build, "ClientBundle": _client_bundle, "Webhook": _webhook,
           "Database": _database, "Release": _release, "Network": _network}
 VERIFY = {"security": "owner-frozen external acceptance with positive and negative cases, replayed by the kernel",

@@ -24,6 +24,8 @@ _VERBS = {"get", "post", "put", "patch", "delete"}
 _CREDENTIAL_LAST = {"password", "passwd", "pwd", "secret", "token", "apikey", "secretkey"}
 _KEY_PREFIXES = {"api", "secret", "access", "private", "signing", "encryption", "client"}
 _PLACEHOLDERS = ("change", "example", "your", "xxx", "<", "${", "placeholder", "dummy", "redacted", "todo", "replace")
+_AIOHTTP = {"add_route": None, "add_get": "GET", "add_post": "POST", "add_put": "PUT", "add_patch": "PATCH",
+            "add_delete": "DELETE", "get": "GET", "post": "POST", "put": "PUT", "patch": "PATCH", "delete": "DELETE"}
 _LOG_METHODS = {"exception", "error", "warning", "warn", "critical", "fatal", "info", "debug", "log"}
 _BROAD = {"Exception", "BaseException"}
 _DECLARATIVE = {"group", "callback", "abstractmethod", "abstractproperty", "overload"}
@@ -132,6 +134,17 @@ def _domain(tree):
                 name = view.id if isinstance(view, ast.Name) else view.attr if isinstance(view, ast.Attribute) else None
                 if name:
                     routes.append({"path": _const(node.args[0]), "methods": ["ANY"], "function": name, "line": node.lineno})
+            # aiohttp: router.add_route("GET", "/p", handler), router.add_get("/p", handler), web.get("/p", handler)
+            if isinstance(func, ast.Attribute) and func.attr in _AIOHTTP and len(node.args) >= 2:
+                offset = 1 if func.attr == "add_route" else 0
+                method = _const(node.args[0]) if offset else _AIOHTTP[func.attr]
+                path = _const(node.args[offset]) if len(node.args) > offset + 1 else None
+                view = node.args[offset + 1] if len(node.args) > offset + 1 else None
+                name = view.id if isinstance(view, ast.Name) else view.attr if isinstance(view, ast.Attribute) else None
+                if isinstance(method, str) and isinstance(path, str) and path.startswith("/") and name and (
+                        offset or isinstance(func.value, ast.Name) and func.value.id == "web" or func.attr.startswith("add_")):
+                    routes.append({"path": path, "methods": [method.upper() if method != "*" else "ANY"],
+                                   "function": name, "line": node.lineno})
             if isinstance(func, ast.Attribute) and node.args and _const(node.args[0]) is not None and (
                     (func.attr == "getenv" and isinstance(func.value, ast.Name) and func.value.id == "os")
                     or (func.attr == "get" and isinstance(func.value, ast.Attribute) and func.value.attr == "environ")):
@@ -177,9 +190,12 @@ def _functions(tree):
             if _container(node.value):
                 module_containers.update(names)
     out = {}
-    for node in tree.body[:_LIMIT]:
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
+    top = [n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    top_names = {n.name for n in top}
+    # Methods of top-level classes resolve calls such as Student.create(...) across files.
+    methods = [m for c in tree.body if isinstance(c, ast.ClassDef) for m in c.body
+               if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)) and m.name not in top_names]
+    for node in (top + methods)[:_LIMIT]:
         calls, mutates = set(), set()
         declared_global = {n for g in ast.walk(node) if isinstance(g, ast.Global) for n in g.names}
         local_containers = {t.id for s in ast.walk(node) if isinstance(s, ast.Assign) and _container(s.value)
@@ -498,13 +514,35 @@ _ALLOWED_SQL = {sqlite3.SQLITE_CREATE_TABLE, sqlite3.SQLITE_CREATE_INDEX, sqlite
                 sqlite3.SQLITE_FUNCTION, sqlite3.SQLITE_TRANSACTION}
 
 
+_DIALECTS = (("postgresql", __import__("re").compile(r"\b(SERIAL|BIGSERIAL|JSONB|ILIKE|RETURNING|CREATE\s+EXTENSION|"
+                                                       r"\$\d+|::\w+|USING\s+\w+\s*\(|plpgsql|TIMESTAMPTZ|UUID)\b|::", __import__("re").I)),
+             ("mysql", __import__("re").compile(r"\bAUTO_INCREMENT\b|ENGINE\s*=|`\w+`|UNSIGNED\b", __import__("re").I)),
+             ("sqlserver", __import__("re").compile(r"\bIDENTITY\s*\(|\bNVARCHAR\b|\[dbo\]|\bGO\s*$", __import__("re").I | __import__("re").M)))
+
+
+def _sql_dialect(text):
+    """Dialect classification only (keyword markers); parsing is done by SQLite itself."""
+    for name, rx in _DIALECTS:
+        if rx.search(text):
+            return name
+    return "sqlite"
+
+
 def _sql(data):
     conn = sqlite3.connect(":memory:")
     try:
         conn.set_authorizer(lambda action, *_: sqlite3.SQLITE_OK if action in _ALLOWED_SQL else sqlite3.SQLITE_DENY)
         try:
-            conn.executescript(data.decode("utf-8"))
-        except (sqlite3.Error, UnicodeDecodeError, ValueError) as exc:
+            text = data.decode("utf-8")
+            conn.executescript(text)
+        except UnicodeDecodeError as exc:
+            return {"state": "INDEXED", "error": f"undecodable SQL: {exc}"[:300]}
+        except (sqlite3.Error, ValueError) as exc:
+            dialect = _sql_dialect(text)
+            if dialect != "sqlite":
+                return {"state": "INDEXED", "reason": f"unsupported: {dialect} dialect; only SQLite-compatible SQL is analysed"}
+            if "no such table" in str(exc):
+                return {"state": "PARSED", "reason": f"unresolved: references a table defined elsewhere ({exc})"[:300]}
             return {"state": "INDEXED", "error": f"SQL not understood by SQLite: {exc}"[:300]}
         # set_authorizer(None) only clears the hook from Python 3.11; allow reads explicitly instead.
         conn.set_authorizer(lambda *_: sqlite3.SQLITE_OK)

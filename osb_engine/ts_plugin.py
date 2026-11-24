@@ -87,6 +87,22 @@ def _walk(root, budget):
         stack.extend(reversed(node.children))
 
 
+_FUNCS = ("function_declaration", "function_expression", "arrow_function", "method_definition",
+          "generator_function_declaration", "function")
+
+
+def _walk_own(root, budget):
+    """Walk a function body without descending into nested functions (each is analysed itself)."""
+    stack, seen = [root], 0
+    while stack:
+        node = stack.pop()
+        seen += 1
+        if seen > budget:
+            raise OverflowError("node budget exceeded")
+        yield node
+        stack.extend(c for c in reversed(node.children) if c.type not in _FUNCS)
+
+
 def _route_path_from_file(path):
     """Next.js App Router (app/**/route.ts) and Pages API (pages/api/**) URL paths."""
     parts = path.split("/")
@@ -115,6 +131,11 @@ def _request_derived(node, source, budget):
 def _dynamic_string(node):
     return node.type == "template_string" and any(c.type == "template_substitution" for c in node.children) \
         or node.type == "binary_expression"
+
+
+def _is_route_argument(node):
+    args = node.parent
+    return args is not None and args.type == "arguments"
 
 
 def _inside_function(node, func_types):
@@ -181,7 +202,7 @@ def _facts(path, root, source):
         statements = [c for c in body.named_children if c.type != "comment"] if body.type == "statement_block" else [body]
         if body.type == "statement_block" and not statements:
             issues.append({"kind": "placeholder", "function": name, "line": node.start_point[0] + 1})
-        for n in _walk(body, budget):
+        for n in _walk_own(body, budget):
             if n.type == "throw_statement" and _NOT_IMPLEMENTED.search(_text(n, source)):
                 issues.append({"kind": "not_implemented", "function": name, "line": n.start_point[0] + 1})
             elif n.type == "call_expression":
@@ -245,9 +266,11 @@ def _facts(path, root, source):
                 if handler.type in func_types:
                     name = f"<handler {method} {_string(argv[0], source)}@{line}>"
                     analyse_function(handler, name, middleware)
-                else:
-                    name = _callee(handler, source) or f"<handler@{line}>"
-                    functions.setdefault(name, {"calls": [], "mutates": [], "decorators": []})["decorators"] += middleware
+                else:  # handler defined elsewhere: a route node that calls it, resolved across files by the index
+                    target_name = _callee(handler, source) or ""
+                    name = f"<route {method} {_string(argv[0], source)}@{line}>"
+                    functions[name] = {"calls": [target_name.rsplit(".", 1)[-1]] if target_name else [],
+                                       "mutates": [], "decorators": middleware}
                 routes.append({"path": _string(argv[0], source), "methods": [method], "function": name, "line": line})
             elif target in ("fetch", "axios", "axios.get", "axios.post", "axios.put", "axios.patch", "axios.delete",
                             "api.get", "api.post", "api.put", "api.patch", "api.delete") and argv:
@@ -279,6 +302,15 @@ def _facts(path, root, source):
             if next_path and router_kind == "app" and exported and name in NEXT_METHODS:
                 routes.append({"path": next_path, "methods": [name], "function": name, "line": line})
             analyse_function(node, name)
+        elif kind in ("arrow_function", "function_expression") and node.parent is not None \
+                and node.parent.type in ("assignment_expression", "pair") and not _is_route_argument(node):
+            parent = node.parent
+            left = parent.child_by_field_name("left") if parent.type == "assignment_expression" else parent.child_by_field_name("key")
+            target = (_callee(left, source) if left is not None and left.type != "string" else _string(left, source)) if left is not None else None
+            if target:
+                name = target.rsplit(".", 1)[-1]
+                definitions.append({"name": name, "kind": "function", "line": line})
+                analyse_function(node, name)
         elif kind in ("arrow_function", "function_expression") and node.parent is not None \
                 and node.parent.type == "variable_declarator":
             name = function_name(node)

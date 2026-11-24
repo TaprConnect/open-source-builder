@@ -133,6 +133,19 @@ _PERSISTENCE = {"execute", "executemany", "commit", "add", "add_all", "save", "i
 
 
 _JS = ("typescript", "javascript")
+_AUTH_JS = __import__("re").compile(r"logged_?in|authenticat|ensure_?auth|require_?(user|session|login)|protect|guard|"
+                                    r"passport|session", __import__("re").I)
+_VENDORED_DIRS = ("vendor/", "node_modules/", "third_party/", "third-party/", "bower_components/", "dist/", "build/")
+
+
+def vendored(path, data):
+    """Third-party or generated code: excluded from findings and reported as such."""
+    lowered = "/" + path.lower()
+    if any("/" + d in lowered for d in _VENDORED_DIRS) or lowered.endswith((".min.js", "-min.js", ".bundle.js")):
+        return True
+    head = data[:600]
+    lines = data.count(b"\n") + 1
+    return len(data) > 4000 and len(data) / lines > 300 or len(data) > 50_000 and (b"@license" in head or b"/*!" in head)
 _JS_SUFFIXES = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
 _PERSISTENCE_JS = {"create", "createMany", "update", "updateMany", "upsert", "delete", "deleteMany", "query",
                    "insert", "insertOne", "insertMany", "updateOne", "save", "execute", "run", "$executeRaw",
@@ -285,19 +298,25 @@ def _cycles(nodes, edges):
 def build_index(repo, extractor=None):
     """Index the pinned revision. extractor(items) -> {key: result}; None means in-process."""
     run = extractor or (lambda items: {k: plugins.extract(kind, data, k) for k, kind, data in items})
-    blobs, items = [], []
+    blobs, items, excluded = [], [], set()
     for blob in repo.inventory():
         kind = plugins.language(blob.path)
         blobs.append((blob, kind))
         if kind in plugins.PLUGINS and blob.kind == "blob" and blob.mode in ("100644", "100755") \
                 and blob.size <= 4 * 1024 * 1024:
-            items.append((blob.path, kind, repo.read(blob)))
+            data = repo.read(blob)
+            if kind in _JS and vendored(blob.path, data):
+                excluded.add(blob.path)
+                continue
+            items.append((blob.path, kind, data))
     results = run(items)
     files, modules = [], {}
     for blob, kind in blobs:
         entry = {"path": blob.path, "language": kind, "state": "INDEXED"}
         result = results.get(blob.path)
-        if kind is not None and kind not in plugins.PLUGINS:
+        if blob.path in excluded:
+            entry["reason"] = "excluded: vendored or minified third-party code"
+        elif kind is not None and kind not in plugins.PLUGINS:
             entry["reason"] = f"unsupported: no parser available for {kind}"
         elif kind is not None and blob.path in results and result is None:
             entry["error"] = "isolated extraction failed or result rejected"
@@ -401,14 +420,21 @@ def build_index(repo, extractor=None):
                 for candidate in [path] + imports_of.get(path, []):
                     if call in by_path.get(candidate, {}).get("functions", {}):
                         frontier.append((candidate, call))
-                        break
+                        if not path.endswith(_JS_SUFFIXES):
+                            break  # JS member calls (dao.save) may name an imported function, so follow all
         infos = [by_path[p]["functions"][n] for p, n in reach]
         calls = {c for i in infos for c in i["calls"]}
         mutates = {m for i in infos for m in i["mutates"]}
+        js = route["file"].endswith(_JS_SUFFIXES)
         auth = "detected" if any((_AUTH.search(x) and x not in _CREDENTIAL_ISSUING) or _VERIFYING.match(x)
+                                 or js and _AUTH_JS.search(x)
                                  for i in infos for x in i["decorators"] + i["calls"]) else "not_detected"
         flags = []
-        if any(i["function"] == route["function"] and i["kind"] in ("placeholder", "not_implemented")
+        if js and route["function"].startswith("<route ") and len(reach) <= 1:
+            flags.append("handler_unresolved")
+            if auth == "not_detected":
+                auth = "unresolved"
+        elif any(i["function"] == route["function"] and i["kind"] in ("placeholder", "not_implemented")
                for i in facts.get("issues", [])):
             flags.append("unimplemented")
         elif set(route["methods"]) & {"POST", "PUT", "PATCH", "DELETE", "ANY"} - {"ANY"} and not calls & (

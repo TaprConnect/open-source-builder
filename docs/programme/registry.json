@@ -1,0 +1,208 @@
+{
+ "schema": 1,
+ "spec": "docs/programme/DIRECTIVE_S05_S07.md",
+ "statuses": [
+  "not_started",
+  "in_progress",
+  "implemented_unverified",
+  "verified",
+  "blocked"
+ ],
+ "requirements": {
+  "S05-003": {
+   "status": "implemented_unverified",
+   "implementation": [
+    "osb_engine/assurance.py"
+   ],
+   "tests": [
+    "test_assurance.py"
+   ],
+   "evidence": [],
+   "notes": "States, versions, applicability, dependency order, failure isolation, budget, receipts. Not yet CI-verified at head."
+  },
+  "S05-005": {
+   "status": "implemented_unverified",
+   "implementation": [
+    "osb_engine/runtime.py"
+   ],
+   "tests": [
+    "test_assurance.py"
+   ],
+   "evidence": [],
+   "notes": "Build/unit/integration/typecheck/lint/migration discovery; isolated, fail-closed. API/auth/persistence/recovery/a11y require external acceptance; browser adapter absent."
+  },
+  "S05-008": {
+   "status": "in_progress",
+   "implementation": [
+    "osb_engine/assurance.py"
+   ],
+   "tests": [
+    "test_assurance.py"
+   ],
+   "evidence": [],
+   "notes": "All 66 domains declared with applicability, evidence and verification; 21 static evaluators; many domains honestly unsupported/blocked."
+  },
+  "S05-009": {
+   "status": "implemented_unverified",
+   "implementation": [
+    "osb_engine/ts_plugin.py",
+    "osb_engine/intelligence.py",
+    "osb_engine/plugins.py"
+   ],
+   "tests": [
+    "test_ts_plugin.py"
+   ],
+   "evidence": [],
+   "notes": "tree-sitter TS/TSX/JS; SQL dialect classification. BLOCKED IN CI: frozen s04_001 line 41 and s04_005 line 19 assert TS is unsupported; owner decision pending. Tests were written alongside implementation, not frozen before it."
+  },
+  "S05-010": {
+   "status": "in_progress",
+   "implementation": [
+    "osb_engine/plugins.py",
+    "osb_engine/ts_plugin.py"
+   ],
+   "tests": [
+    "test_plugins_compat.py",
+    "test_ts_plugin.py"
+   ],
+   "evidence": [],
+   "notes": "tomli preferred; subset parser hardened and labelled partial; TS node budget. Aggregate resource exhaustion tests still outstanding."
+  },
+  "S05-ACCEPT": {
+   "status": "in_progress",
+   "implementation": [],
+   "tests": [],
+   "evidence": [],
+   "notes": "Development set: OWASP NodeGoat c5cb68a, anxolerd/dvpwa 4a8f4a4 (tuned against). Holdout set not yet selected or measured. Precision/recall report not yet published."
+  },
+  "S06-001": {
+   "status": "not_started",
+   "implementation": [],
+   "tests": [],
+   "evidence": [],
+   "notes": ""
+  },
+  "S06-002": {
+   "status": "not_started",
+   "implementation": [],
+   "tests": [],
+   "evidence": [],
+   "notes": ""
+  },
+  "S06-003": {
+   "status": "not_started",
+   "implementation": [],
+   "tests": [],
+   "evidence": [],
+   "notes": ""
+  },
+  "S06-004": {
+   "status": "not_started",
+   "implementation": [],
+   "tests": [],
+   "evidence": [],
+   "notes": ""
+  },
+  "S06-005": {
+   "status": "not_started",
+   "implementation": [],
+   "tests": [],
+   "evidence": [],
+   "notes": ""
+  },
+  "S06-006": {
+   "status": "not_started",
+   "implementation": [],
+   "tests": [],
+   "evidence": [],
+   "notes": ""
+  },
+  "S06-007": {
+   "status": "not_started",
+   "implementation": [],
+   "tests": [],
+   "evidence": [],
+   "notes": ""
+  },
+  "S06-W1": {
+   "status": "not_started",
+   "implementation": [],
+   "tests": [],
+   "evidence": [],
+   "notes": ""
+  },
+  "S06-ACCEPT": {
+   "status": "not_started",
+   "implementation": [],
+   "tests": [],
+   "evidence": [],
+   "notes": ""
+  },
+  "S07-001": {
+   "status": "not_started",
+   "implementation": [],
+   "tests": [],
+   "evidence": [],
+   "notes": ""
+  },
+  "S07-002": {
+   "status": "not_started",
+   "implementation": [],
+   "tests": [],
+   "evidence": [],
+   "notes": ""
+  },
+  "S07-003": {
+   "status": "not_started",
+   "implementation": [],
+   "tests": [],
+   "evidence": [],
+   "notes": ""
+  },
+  "S07-004": {
+   "status": "not_started",
+   "implementation": [],
+   "tests": [],
+   "evidence": [],
+   "notes": ""
+  },
+  "S07-005": {
+   "status": "not_started",
+   "implementation": [],
+   "tests": [],
+   "evidence": [],
+   "notes": ""
+  },
+  "S07-007": {
+   "status": "not_started",
+   "implementation": [],
+   "tests": [],
+   "evidence": [],
+   "notes": ""
+  },
+  "S07-006": {
+   "status": "blocked",
+   "implementation": [],
+   "tests": [],
+   "evidence": [],
+   "notes": "No authorised live model provider access or paid-API approval; must not be simulated."
+  }
+ },
+ "blockers": [
+  {
+   "id": "B1",
+   "requirement": "S05-009",
+   "detail": "Frozen acceptance s04_001 (line 41) and s04_005 (line 19) require TypeScript to be unsupported; revising frozen acceptance requires owner approval (agent attempt was correctly denied)."
+  },
+  {
+   "id": "B2",
+   "requirement": "S07-006",
+   "detail": "No live model provider credentials or paid-API approval."
+  },
+  {
+   "id": "B3",
+   "requirement": "local-acceptance",
+   "detail": "This container cannot nest bubblewrap (/proc mount denied); the frozen suite runs only in CI. tools/run_frozen_local.py is a developer approximation."
+  }
+ ]
+}

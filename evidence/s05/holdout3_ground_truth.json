@@ -1,0 +1,121 @@
+{
+ "frozen_at": "2026-11-24T11:33:09+00:00",
+ "method": "Third blind holdout after precision round 2. Ground truth from README 'Vulnerability map' only, written before OSB was run on this project.",
+ "projects": {
+  "cr0hn/vulnerable-node": {
+   "commit": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+   "language": "javascript",
+   "source": "README.md Vulnerability map",
+   "defects": [
+    {
+     "id": "V01",
+     "category": "bola_idor_orders",
+     "domain": "Tenancy",
+     "modelled": true
+    },
+    {
+     "id": "V02",
+     "category": "ssrf_imds",
+     "domain": "Network",
+     "modelled": true
+    },
+    {
+     "id": "V03",
+     "category": "sql_injection_db_model",
+     "domain": "WebDefences",
+     "modelled": true
+    },
+    {
+     "id": "V03b",
+     "category": "nosql_injection_mongo_filters",
+     "domain": "WebDefences",
+     "modelled": true
+    },
+    {
+     "id": "V04",
+     "category": "mass_assignment_admin",
+     "domain": "Identity",
+     "modelled": false
+    },
+    {
+     "id": "V05",
+     "category": "stored_xss_token_theft",
+     "domain": "WebDefences",
+     "modelled": false
+    },
+    {
+     "id": "V06",
+     "category": "checkout_price_tampering",
+     "domain": "Backend",
+     "modelled": false
+    },
+    {
+     "id": "V06b",
+     "category": "csrf",
+     "domain": "WebDefences",
+     "modelled": false
+    },
+    {
+     "id": "V07",
+     "category": "forgeable_jwt_weak_secret",
+     "domain": "Secrets",
+     "modelled": true
+    },
+    {
+     "id": "V09",
+     "category": "debug_verbose_errors",
+     "domain": "Configuration",
+     "modelled": false
+    },
+    {
+     "id": "V10",
+     "category": "secrets_in_logs_log_injection",
+     "domain": "Privacy",
+     "modelled": false
+    },
+    {
+     "id": "V11",
+     "category": "poisoned_ci_pipelines",
+     "domain": "Release",
+     "modelled": false
+    },
+    {
+     "id": "V12",
+     "category": "secret_in_git_history",
+     "domain": "Secrets",
+     "modelled": false
+    },
+    {
+     "id": "V13",
+     "category": "prototype_pollution_merge",
+     "domain": "WebDefences",
+     "modelled": false
+    },
+    {
+     "id": "V14",
+     "category": "redos_regex_tester",
+     "domain": "WebDefences",
+     "modelled": false
+    },
+    {
+     "id": "V15",
+     "category": "path_traversal_downloads",
+     "domain": "WebDefences",
+     "modelled": true
+    },
+    {
+     "id": "V16",
+     "category": "command_injection_ping",
+     "domain": "WebDefences",
+     "modelled": true
+    },
+    {
+     "id": "V17",
+     "category": "docker_hardening",
+     "domain": "Infrastructure",
+     "modelled": false
+    }
+   ]
+  }
+ }
+}

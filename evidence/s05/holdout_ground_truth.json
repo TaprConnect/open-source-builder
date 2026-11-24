@@ -1,0 +1,151 @@
+{
+ "frozen_at": "2026-11-24T10:54:03+00:00",
+ "method": "Ground truth taken only from each project's own vulnerability documentation, written before OSB was run on it. Recall is per documented defect category; 'modelled' states whether OSB claims a detector before the run.",
+ "projects": {
+  "snyk-labs/nodejs-goof": {
+   "commit": "add14ba59e98240d9e00a235dd7d42cd61ae9912",
+   "language": "javascript",
+   "source": "README.md 'Vulnerabilities in code' and exploits/",
+   "defects": [
+    {
+     "id": "G1",
+     "category": "nosql_injection",
+     "domain": "WebDefences",
+     "modelled": false
+    },
+    {
+     "id": "G2",
+     "category": "code_injection",
+     "domain": "WebDefences",
+     "modelled": true
+    },
+    {
+     "id": "G3",
+     "category": "command_injection",
+     "domain": "WebDefences",
+     "modelled": true
+    },
+    {
+     "id": "G4",
+     "category": "xss_template",
+     "domain": "WebDefences",
+     "modelled": false
+    },
+    {
+     "id": "G5",
+     "category": "open_redirect",
+     "domain": "WebDefences",
+     "modelled": false
+    },
+    {
+     "id": "G6",
+     "category": "hardcoded_session_secret",
+     "domain": "Secrets",
+     "modelled": true
+    },
+    {
+     "id": "G7",
+     "category": "prototype_pollution",
+     "domain": "WebDefences",
+     "modelled": false
+    },
+    {
+     "id": "G8",
+     "category": "zip_slip_path_traversal",
+     "domain": "WebDefences",
+     "modelled": true
+    },
+    {
+     "id": "G9",
+     "category": "known_vulnerable_dependencies",
+     "domain": "SupplyChain",
+     "modelled": false
+    }
+   ]
+  },
+  "adeyosemanputra/pygoat": {
+   "commit": "2aa4cc14f251e4a780e94e200aed6b36a5b15c21",
+   "language": "python",
+   "source": "Solutions/solution.md section headings",
+   "defects": [
+    {
+     "id": "P1",
+     "category": "sql_injection",
+     "domain": "WebDefences",
+     "modelled": true
+    },
+    {
+     "id": "P2",
+     "category": "command_injection",
+     "domain": "WebDefences",
+     "modelled": true
+    },
+    {
+     "id": "P3",
+     "category": "broken_authentication",
+     "domain": "Identity",
+     "modelled": false
+    },
+    {
+     "id": "P4",
+     "category": "sensitive_data_exposure",
+     "domain": "Secrets",
+     "modelled": true
+    },
+    {
+     "id": "P5",
+     "category": "xxe",
+     "domain": "WebDefences",
+     "modelled": false
+    },
+    {
+     "id": "P6",
+     "category": "broken_access_control",
+     "domain": "Identity",
+     "modelled": true
+    },
+    {
+     "id": "P7",
+     "category": "security_misconfiguration",
+     "domain": "Configuration",
+     "modelled": false
+    },
+    {
+     "id": "P8",
+     "category": "xss",
+     "domain": "WebDefences",
+     "modelled": false
+    },
+    {
+     "id": "P9",
+     "category": "insecure_deserialization",
+     "domain": "WebDefences",
+     "modelled": false
+    },
+    {
+     "id": "P10",
+     "category": "known_vulnerable_components",
+     "domain": "SupplyChain",
+     "modelled": false
+    },
+    {
+     "id": "P11",
+     "category": "insufficient_logging",
+     "domain": "Observability",
+     "modelled": true
+    },
+    {
+     "id": "P12",
+     "category": "ssrf",
+     "domain": "Network",
+     "modelled": false
+    }
+   ]
+  }
+ },
+ "development_set": {
+  "OWASP/NodeGoat": "c5cb68a7084e4ae7dcc60e6a98768720a81841e8",
+  "anxolerd/dvpwa": "4a8f4a43fafcc1b304f1b97d0f0a8dea755a7756",
+  "note": "evaluator fixes were tuned against these; they are not holdout evidence"
+ }
+}

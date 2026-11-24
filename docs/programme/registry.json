@@ -76,9 +76,10 @@
    "evidence": [
     "evidence/s05/report.json",
     "evidence/s05/holdout_ground_truth.json",
-    "evidence/s05/holdout2_ground_truth.json"
+    "evidence/s05/holdout2_ground_truth.json",
+    "evidence/s05/holdout3_ground_truth.json"
    ],
-   "notes": "Not certified. Holdout 1: nodejs-goof 0/9, pygoat 3/12. Holdout 2 (after JS fixes): dvna 2/19 (+1 mislabelled), reviewed precision 3/10. Next: ORM-aware NoSQL rule, require('child_process').exec alias, read-route Identity, then a third holdout."
+   "notes": "Not certified. Strict recall on documented defects: nodejs-goof 0/9, pygoat 3/12, dvna 2/19, vulnerable-node 1/18; reviewed precision 10/11, 0/1, 3/10, 7/15. After holdout 3: intraprocedural taint through locals, redirect-prefix rule, Tenancy limited to user-owned data \u2014 need holdout 4."
   },
   "S06-001": {
    "status": "implemented_unverified",

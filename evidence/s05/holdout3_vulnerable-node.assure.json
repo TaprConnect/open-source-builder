@@ -1,0 +1,3036 @@
+{
+  "assurance": {
+    "engine": "1",
+    "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+    "controls": [
+      {
+        "id": "E01-Identity",
+        "version": "1.1",
+        "domain": "Identity",
+        "family": "security",
+        "security": true,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "private workspace exists",
+        "required_evidence": "server session and recovery path",
+        "acceptance_condition": "revoked sessions lose access",
+        "static_evaluator": "Identity",
+        "runtime_adapters": [
+          "authorization"
+        ],
+        "depends_on": [],
+        "severity": "high",
+        "remediation": "Require authentication and authorisation on write routes and add a denied-access test.",
+        "remediation_verification": "owner-frozen external acceptance with positive and negative cases, replayed by the kernel",
+        "evidence": [],
+        "violations": [
+          {
+            "file": "routes/orders.js",
+            "route": "POST /checkout",
+            "detail": "no authentication evidence"
+          },
+          {
+            "file": "routes/pages.js",
+            "route": "POST /contact",
+            "detail": "no authentication evidence"
+          },
+          {
+            "file": "routes/shop.js",
+            "route": "POST /api/tags-filter",
+            "detail": "no authentication evidence"
+          },
+          {
+            "file": "sast/seeds/deserialization.js",
+            "route": "POST /session",
+            "detail": "no authentication evidence"
+          },
+          {
+            "file": "sast/seeds/eval-code.js",
+            "route": "POST /calc",
+            "detail": "no authentication evidence"
+          },
+          {
+            "file": "sast/seeds/ssrf-fetch.js",
+            "route": "POST /preview",
+            "detail": "no authentication evidence"
+          },
+          {
+            "file": "sast/seeds/xss-raw-echo.js",
+            "route": "GET /profile",
+            "detail": "read route for admin or personal data without authentication evidence"
+          }
+        ],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            "POST /account",
+            "POST /account/token",
+            "POST /api/tags-filter",
+            "POST /auth/token",
+            "POST /calc",
+            "POST /checkout",
+            "POST /contact",
+            "POST /login/auth",
+            "POST /preferences",
+            "POST /preview",
+            "POST /products/:id/reviews",
+            "POST /register",
+            "POST /session",
+            "POST /tools/fetch",
+            "POST /tools/ping",
+            "POST /tools/regex"
+          ]
+        },
+        "state": "fail",
+        "confidence": "static-candidate",
+        "reason": "7 static violation(s); confirm with the acceptance condition",
+        "duration_ms": 0.156,
+        "receipt_sha256": "9cf4f4d39690c08fe26e27c667b097552eee670840588615933e22de33d92b23"
+      },
+      {
+        "id": "E01-Tenancy",
+        "version": "1.1",
+        "domain": "Tenancy",
+        "family": "security",
+        "security": true,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "records belong to organisations",
+        "required_evidence": "queries and policy migrations",
+        "acceptance_condition": "owner succeeds and other tenant is denied",
+        "static_evaluator": "Tenancy",
+        "runtime_adapters": [
+          "authorization"
+        ],
+        "depends_on": [
+          "Identity"
+        ],
+        "severity": "high",
+        "remediation": "Meet the required outcome: owner succeeds and other tenant is denied.",
+        "remediation_verification": "owner-frozen external acceptance with positive and negative cases, replayed by the kernel",
+        "evidence": [],
+        "violations": [
+          {
+            "file": "routes/pages.js",
+            "route": "GET /categories/:slug",
+            "detail": "record addressed by identifier without authentication evidence (cross-user exposure candidate)"
+          },
+          {
+            "file": "routes/shop.js",
+            "route": "GET /products/:id",
+            "detail": "record addressed by identifier without authentication evidence (cross-user exposure candidate)"
+          },
+          {
+            "file": "sast/seeds/eval-code.js",
+            "route": "GET /greet/:name",
+            "detail": "record addressed by identifier without authentication evidence (cross-user exposure candidate)"
+          }
+        ],
+        "applicability": {
+          "applies": null,
+          "evidence": [
+            "no ownership columns found; tenancy undetermined"
+          ]
+        },
+        "state": "fail",
+        "confidence": "static-candidate",
+        "reason": "3 static violation(s); confirm with the acceptance condition",
+        "duration_ms": 0.145,
+        "receipt_sha256": "f700f6af1e9cdf488d81493b8b988c560f8f9ae1b49f50eb711adaf5677ba84e"
+      },
+      {
+        "id": "E01-Persistence",
+        "version": "1.1",
+        "domain": "Persistence",
+        "family": "data",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "save is promised",
+        "required_evidence": "write handler and fresh read",
+        "acceptance_condition": "saved record survives restart",
+        "static_evaluator": "Persistence",
+        "runtime_adapters": [
+          "persistence"
+        ],
+        "depends_on": [],
+        "severity": "medium",
+        "remediation": "Persist writes through the data layer (or document intentionally ephemeral state) and add an acceptance test that reads the record back after restart.",
+        "remediation_verification": "external acceptance that writes, restarts and reads back on the same store",
+        "evidence": [],
+        "violations": [
+          {
+            "file": "routes/account.js",
+            "route": "POST /preferences",
+            "detail": "no_persistence"
+          },
+          {
+            "file": "routes/extras.js",
+            "route": "POST /tools/ping",
+            "detail": "no_persistence"
+          },
+          {
+            "file": "routes/shop.js",
+            "route": "POST /api/tags-filter",
+            "detail": "no_persistence"
+          },
+          {
+            "file": "routes/tools.js",
+            "route": "POST /tools/fetch",
+            "detail": "no_persistence"
+          },
+          {
+            "file": "routes/tools.js",
+            "route": "POST /tools/regex",
+            "detail": "no_persistence"
+          },
+          {
+            "file": "sast/seeds/deserialization.js",
+            "route": "POST /session",
+            "detail": "no_persistence"
+          },
+          {
+            "file": "sast/seeds/eval-code.js",
+            "route": "POST /calc",
+            "detail": "no_persistence"
+          },
+          {
+            "file": "sast/seeds/ssrf-fetch.js",
+            "route": "POST /preview",
+            "detail": "no_persistence"
+          }
+        ],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            "POST /account",
+            "POST /account/token",
+            "POST /api/tags-filter",
+            "POST /auth/token",
+            "POST /calc",
+            "POST /checkout",
+            "POST /contact",
+            "POST /login/auth",
+            "POST /preferences",
+            "POST /preview",
+            "POST /products/:id/reviews",
+            "POST /register",
+            "POST /session",
+            "POST /tools/fetch",
+            "POST /tools/ping",
+            "POST /tools/regex"
+          ]
+        },
+        "state": "fail",
+        "confidence": "static-candidate",
+        "reason": "8 static violation(s); confirm with the acceptance condition",
+        "duration_ms": 0.064,
+        "receipt_sha256": "4b3daa44d8123fc5dfddb3af70e1f1e922aab5b3aa3f79e9a774a943c5c1e978"
+      },
+      {
+        "id": "E01-Backend",
+        "version": "1.1",
+        "domain": "Backend",
+        "family": "backend",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "API has a consumer",
+        "required_evidence": "contract and handler",
+        "acceptance_condition": "malformed request has actionable error",
+        "static_evaluator": "Backend",
+        "runtime_adapters": [
+          "unit_tests",
+          "api_behaviour"
+        ],
+        "depends_on": [],
+        "severity": "medium",
+        "remediation": "Implement the handler or remove the advertised route; add an acceptance test for the real behaviour.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            "config.js",
+            "db/init.js",
+            "db/seed-data.js",
+            "middleware/auth.js",
+            "mocks/imds/server.js",
+            "mocks/vault/server.js",
+            "model/db.js",
+            "model/merge.js",
+            "public/js/app.js",
+            "public/js/labs.js",
+            "routes/account.js",
+            "routes/api/v1.js",
+            "routes/auth.js",
+            "routes/extras.js",
+            "routes/orders.js",
+            "routes/pages.js",
+            "routes/progress.js",
+            "routes/shop.js",
+            "routes/tools.js",
+            "sast/seeds/clean-escaped.js"
+          ]
+        },
+        "state": "unknown",
+        "confidence": "static",
+        "reason": "no violation found; acceptance evidence absent",
+        "duration_ms": 0.053,
+        "receipt_sha256": "94461ee7cb9e5788b84d4e4b685d0071f5febfff12f3fe78412786607baab566"
+      },
+      {
+        "id": "E01-Frontend",
+        "version": "1.1",
+        "domain": "Frontend",
+        "family": "frontend",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "interactive controls exist",
+        "required_evidence": "browser interaction",
+        "acceptance_condition": "success failure loading and retry rendered",
+        "static_evaluator": "Frontend",
+        "runtime_adapters": [
+          "build",
+          "integration_tests"
+        ],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Meet the required outcome: success failure loading and retry rendered.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "no UI sources"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "no UI sources",
+        "duration_ms": 0.024,
+        "receipt_sha256": "d00c7dd6331fa55eb6812d40ea9218397fd8d77fa0533617c307765573d2e9fa"
+      },
+      {
+        "id": "E01-Motion",
+        "version": "1.1",
+        "domain": "Motion",
+        "family": "frontend",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "animated transitions exist",
+        "required_evidence": "reduced motion setting",
+        "acceptance_condition": "controls remain usable with animation disabled",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "accessibility"
+        ],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Meet the required outcome: controls remain usable with animation disabled.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of @react-spring, animejs, framer-motion, gsap, motion, react-spring imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of @react-spring, animejs, framer-motion, gsap, motion, react-spring imported",
+        "duration_ms": 0.015,
+        "receipt_sha256": "5025fa9ba412e584ee24ae6eefcec95a3013404e47c5028edd8727ab92768409"
+      },
+      {
+        "id": "E01-Accessibility",
+        "version": "1.1",
+        "domain": "Accessibility",
+        "family": "frontend",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "interactive UI exists",
+        "required_evidence": "keyboard journey",
+        "acceptance_condition": "focus reaches controls and returns after modal close",
+        "static_evaluator": "Accessibility",
+        "runtime_adapters": [
+          "accessibility"
+        ],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Meet the required outcome: focus reaches controls and returns after modal close.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "no UI sources"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "no UI sources",
+        "duration_ms": 0.015,
+        "receipt_sha256": "0cfd9460f288150532f4edd9e5eafda641c31622761e339550b8be22347d3e7a"
+      },
+      {
+        "id": "E01-Jobs",
+        "version": "1.1",
+        "domain": "Jobs",
+        "family": "reliability",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "background job produced",
+        "required_evidence": "queue and worker",
+        "acceptance_condition": "interrupted task resumes once",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "recovery"
+        ],
+        "depends_on": [],
+        "severity": "medium",
+        "remediation": "Meet the required outcome: interrupted task resumes once.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of agenda, apscheduler, bull, bullmq, celery, dramatiq imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of agenda, apscheduler, bull, bullmq, celery, dramatiq imported",
+        "duration_ms": 0.009,
+        "receipt_sha256": "3ede1081b5cabb676ac85eb6ab3f5cfe1b3d31a2b0c7ec6d737a715cbbc7bb13"
+      },
+      {
+        "id": "E01-Billing",
+        "version": "1.1",
+        "domain": "Billing",
+        "family": "business",
+        "security": true,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "paid plan offered",
+        "required_evidence": "entitlement and payment events",
+        "acceptance_condition": "duplicate event grants only one entitlement",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "api_behaviour"
+        ],
+        "depends_on": [
+          "Payments",
+          "Webhook"
+        ],
+        "severity": "high",
+        "remediation": "Meet the required outcome: duplicate event grants only one entitlement.",
+        "remediation_verification": "owner-frozen external acceptance with positive and negative cases, replayed by the kernel",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of @paypal, adyen, braintree, lemonsqueezy, paypalrestsdk, square imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of @paypal, adyen, braintree, lemonsqueezy, paypalrestsdk, square imported",
+        "duration_ms": 0.005,
+        "receipt_sha256": "8499bfaf1cdd9b8c69dc42229e60f799ce6d6f21682ef7f079dab3279a0694c3"
+      },
+      {
+        "id": "E01-Database",
+        "version": "1.1",
+        "domain": "Database",
+        "family": "data",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "migration present",
+        "required_evidence": "before and after data fixtures",
+        "acceptance_condition": "upgrade preserves existing records",
+        "static_evaluator": "Database",
+        "runtime_adapters": [
+          "migrations"
+        ],
+        "depends_on": [],
+        "severity": "medium",
+        "remediation": "Meet the required outcome: upgrade preserves existing records.",
+        "remediation_verification": "external acceptance that writes, restarts and reads back on the same store",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            "db/init.sql",
+            "pg"
+          ]
+        },
+        "state": "unknown",
+        "confidence": "static",
+        "reason": "no violation found; acceptance evidence absent",
+        "duration_ms": 0.082,
+        "receipt_sha256": "aa732367accb08afe10526c28dc6b74111b3a720efc430cb27ac9f867c34116b"
+      },
+      {
+        "id": "E01-AI",
+        "version": "1.1",
+        "domain": "AI",
+        "family": "ai",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "model generates customer output",
+        "required_evidence": "evaluation cases and refusal cases",
+        "acceptance_condition": "output cites accessible supporting evidence",
+        "static_evaluator": null,
+        "runtime_adapters": [],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Meet the required outcome: output cites accessible supporting evidence.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of @anthropic-ai, @langchain, ai, anthropic, cohere, google imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of @anthropic-ai, @langchain, ai, anthropic, cohere, google imported",
+        "duration_ms": 0.009,
+        "receipt_sha256": "ad3fd48bcd5b219a12fc3b38b5d495417e7cdb0e5998de927453cec06f6f10bf"
+      },
+      {
+        "id": "E01-Agent",
+        "version": "1.1",
+        "domain": "Agent",
+        "family": "ai",
+        "security": true,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "tools perform external writes",
+        "required_evidence": "action approval and receipt",
+        "acceptance_condition": "approval binds arguments and identity",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "api_behaviour"
+        ],
+        "depends_on": [],
+        "severity": "high",
+        "remediation": "Meet the required outcome: approval binds arguments and identity.",
+        "remediation_verification": "owner-frozen external acceptance with positive and negative cases, replayed by the kernel",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of @anthropic-ai, @langchain, anthropic, autogen, crewai, langchain imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of @anthropic-ai, @langchain, anthropic, autogen, crewai, langchain imported",
+        "duration_ms": 0.007,
+        "receipt_sha256": "77bf02a5b87159b8b877aa531b0ff590a087a86ad721a56b58c923dc1b48495e"
+      },
+      {
+        "id": "E01-Privacy",
+        "version": "1.1",
+        "domain": "Privacy",
+        "family": "privacy",
+        "security": true,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "deletion promised",
+        "required_evidence": "storage processors and index",
+        "acceptance_condition": "deletion reaches each promised destination",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "persistence"
+        ],
+        "depends_on": [],
+        "severity": "high",
+        "remediation": "Meet the required outcome: deletion reaches each promised destination.",
+        "remediation_verification": "owner-frozen external acceptance with positive and negative cases, replayed by the kernel",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            "db/init.sql",
+            "pg"
+          ]
+        },
+        "state": "not_performed",
+        "confidence": "none",
+        "reason": "needs the owner's deletion promises and processor list",
+        "duration_ms": 0.029,
+        "receipt_sha256": "d93298a81a88f9445596d2b9053c93501c50403f3155107073bd52fd804e7c73"
+      },
+      {
+        "id": "E01-ML",
+        "version": "1.1",
+        "domain": "ML",
+        "family": "ai",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "training performed",
+        "required_evidence": "data splits and model version",
+        "acceptance_condition": "held-out evaluation is reproducible",
+        "static_evaluator": null,
+        "runtime_adapters": [],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Meet the required outcome: held-out evaluation is reproducible.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of jax, keras, lightgbm, sklearn, tensorflow, torch imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of jax, keras, lightgbm, sklearn, tensorflow, torch imported",
+        "duration_ms": 0.006,
+        "receipt_sha256": "72d0a5d79127d01f1b0300f1c375d5248969a80be164acce05c89fed01e0e472"
+      },
+      {
+        "id": "E01-Operations",
+        "version": "1.1",
+        "domain": "Operations",
+        "family": "operations",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "backup promised",
+        "required_evidence": "restore test",
+        "acceptance_condition": "restored deployment opens representative record",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "recovery"
+        ],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Meet the required outcome: restored deployment opens representative record.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            "Dockerfile",
+            "docker-compose.yml",
+            "mocks/imds/Dockerfile",
+            "mocks/vault/Dockerfile"
+          ]
+        },
+        "state": "not_performed",
+        "confidence": "none",
+        "reason": "needs a backup and restore of a deployed environment",
+        "duration_ms": 0.079,
+        "receipt_sha256": "e4f7e872666a1ce604b854825a1f2d3795cd97f56cdd0195a77ff5d9df562865"
+      },
+      {
+        "id": "E01-Release",
+        "version": "1.1",
+        "domain": "Release",
+        "family": "operations",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "production readiness claimed",
+        "required_evidence": "build and deployment commit IDs",
+        "acceptance_condition": "customer-facing environment matches tested revision",
+        "static_evaluator": "Release",
+        "runtime_adapters": [],
+        "depends_on": [
+          "Build",
+          "Quality"
+        ],
+        "severity": "low",
+        "remediation": "Meet the required outcome: customer-facing environment matches tested revision.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            ".github/workflows/ci-hardened.yml",
+            ".github/workflows/ci.yml",
+            ".github/workflows/sast-benchmark.yml"
+          ]
+        },
+        "state": "blocked",
+        "confidence": "none",
+        "reason": "dependency control(s) not satisfied: Quality",
+        "duration_ms": 0.05,
+        "receipt_sha256": "abb5b0533702126348ad407d3d88aeba451a3570feb2eb634a334ef7bbb331dd"
+      },
+      {
+        "id": "E01-Security",
+        "version": "1.1",
+        "domain": "Security",
+        "family": "security",
+        "security": true,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "shipped client bundle exists",
+        "required_evidence": "release manifest",
+        "acceptance_condition": "client contains only intended public configuration",
+        "static_evaluator": "ClientBundle",
+        "runtime_adapters": [
+          "build"
+        ],
+        "depends_on": [],
+        "severity": "high",
+        "remediation": "Meet the required outcome: client contains only intended public configuration.",
+        "remediation_verification": "owner-frozen external acceptance with positive and negative cases, replayed by the kernel",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "no UI sources"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "no UI sources",
+        "duration_ms": 0.013,
+        "receipt_sha256": "e1fb58a12552a2608a493a4e43b9a432d9dd13fbd4767df87de1e47b2e18fe49"
+      },
+      {
+        "id": "E01-UX",
+        "version": "1.1",
+        "domain": "UX",
+        "family": "frontend",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "reference design approved",
+        "required_evidence": "desktop mobile and keyboard evidence",
+        "acceptance_condition": "approved interaction works at all agreed sizes",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "accessibility"
+        ],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Meet the required outcome: approved interaction works at all agreed sizes.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "no UI sources"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "no UI sources",
+        "duration_ms": 0.015,
+        "receipt_sha256": "964f31265cf7a5341128f45ea0369aa23e9a408bee12f45e910e1f0a652249dc"
+      },
+      {
+        "id": "E01-Pricing",
+        "version": "1.1",
+        "domain": "Pricing",
+        "family": "business",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "AI bundled into subscription",
+        "required_evidence": "dated provider prices and cost per successful task",
+        "acceptance_condition": "retries included in allowance",
+        "static_evaluator": null,
+        "runtime_adapters": [],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Meet the required outcome: retries included in allowance.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": null,
+          "evidence": [
+            "requires the owner's commercial model"
+          ]
+        },
+        "state": "unsupported",
+        "confidence": "none",
+        "reason": "needs dated provider prices and the owner's plan definitions",
+        "duration_ms": 0.005,
+        "receipt_sha256": "cf2030b207f7d219ddea5531bce48d1b6a9899541012978a19b917045fcff7c8"
+      },
+      {
+        "id": "E01-Jurisdiction",
+        "version": "1.1",
+        "domain": "Jurisdiction",
+        "family": "business",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "policy drafted",
+        "required_evidence": "markets entity and official effective dates",
+        "acceptance_condition": "owner reviews applicability and data flows",
+        "static_evaluator": null,
+        "runtime_adapters": [],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Meet the required outcome: owner reviews applicability and data flows.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": null,
+          "evidence": [
+            "requires the owner's markets and legal entity"
+          ]
+        },
+        "state": "unsupported",
+        "confidence": "none",
+        "reason": "needs legal review of markets and data flows",
+        "duration_ms": 0.004,
+        "receipt_sha256": "0c44f733512e000f75db2dd7b3a57e4329ee691ba25bb95413456cb9de4b2687"
+      },
+      {
+        "id": "E01-Intent",
+        "version": "1.1",
+        "domain": "Intent",
+        "family": "business",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "codebase submitted",
+        "required_evidence": "requirements and reachable user journeys",
+        "acceptance_condition": "each promised outcome has an owner and acceptance test",
+        "static_evaluator": null,
+        "runtime_adapters": [],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Meet the required outcome: each promised outcome has an owner and acceptance test.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": null,
+          "evidence": [
+            "requires the owner's stated product intent"
+          ]
+        },
+        "state": "unsupported",
+        "confidence": "none",
+        "reason": "needs the owner's confirmed requirements",
+        "duration_ms": 0.003,
+        "receipt_sha256": "096af89a0120dcda57c31e567ec37137766cb0724797d8a7480bea19bad1957a"
+      },
+      {
+        "id": "E01-Architecture",
+        "version": "1.1",
+        "domain": "Architecture",
+        "family": "architecture",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "service has multiple entry points",
+        "required_evidence": "runtime dependency graph and environment bindings",
+        "acceptance_condition": "actual deployment selects working adapters",
+        "static_evaluator": "Architecture",
+        "runtime_adapters": [],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Break the import cycle by extracting shared code or inverting the dependency.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "no Python sources"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "no Python sources",
+        "duration_ms": 0.015,
+        "receipt_sha256": "12339d736be10e88874c24d93a2680f2f8d757c535a3e3026a68d43bfeddaf67"
+      },
+      {
+        "id": "E01-Build",
+        "version": "1.1",
+        "domain": "Build",
+        "family": "build",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "project ships executable or bundle",
+        "required_evidence": "lockfiles compiler versions and clean build receipt",
+        "acceptance_condition": "artifact reproducible from identified source",
+        "static_evaluator": "Build",
+        "runtime_adapters": [
+          "build"
+        ],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Meet the required outcome: artifact reproducible from identified source.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            "config.js",
+            "db/init.js",
+            "db/seed-data.js",
+            "middleware/auth.js",
+            "mocks/imds/server.js",
+            "mocks/vault/server.js",
+            "model/db.js",
+            "model/merge.js",
+            "public/js/app.js",
+            "public/js/labs.js",
+            "routes/account.js",
+            "routes/api/v1.js",
+            "routes/auth.js",
+            "routes/extras.js",
+            "routes/orders.js",
+            "routes/pages.js",
+            "routes/progress.js",
+            "routes/shop.js",
+            "routes/tools.js",
+            "sast/seeds/clean-escaped.js"
+          ]
+        },
+        "state": "unknown",
+        "confidence": "static",
+        "reason": "no violation found; acceptance evidence absent",
+        "duration_ms": 0.061,
+        "receipt_sha256": "b0c8c79d0ecc19c04df654716ac6d0bb2b5432ce06eed2673769f895eccf01d1"
+      },
+      {
+        "id": "E01-Quality",
+        "version": "1.1",
+        "domain": "Quality",
+        "family": "testing",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "project has executable code",
+        "required_evidence": "lint type-check and test commands",
+        "acceptance_condition": "failures propagate to CI and placeholders never satisfy checks",
+        "static_evaluator": "Quality",
+        "runtime_adapters": [
+          "unit_tests"
+        ],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Add tests that exercise the route or module through its public entry point.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [
+          {
+            "file": "routes/account.js",
+            "route": "GET /account",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/account.js",
+            "route": "POST /account",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/account.js",
+            "route": "POST /account/token",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/account.js",
+            "route": "POST /preferences",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/api/v1.js",
+            "route": "POST /auth/token",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/api/v1.js",
+            "route": "GET /me",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/api/v1.js",
+            "route": "GET /orders",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/api/v1.js",
+            "route": "GET /products",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/auth.js",
+            "route": "GET /login",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/auth.js",
+            "route": "POST /login/auth",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/auth.js",
+            "route": "GET /logout",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/auth.js",
+            "route": "GET /register",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/auth.js",
+            "route": "POST /register",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/extras.js",
+            "route": "GET /download",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/extras.js",
+            "route": "GET /tools/ping",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/extras.js",
+            "route": "POST /tools/ping",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/orders.js",
+            "route": "GET /checkout",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/orders.js",
+            "route": "POST /checkout",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/orders.js",
+            "route": "GET /orders",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/orders.js",
+            "route": "GET /orders/:id",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/pages.js",
+            "route": "GET /about",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/pages.js",
+            "route": "GET /categories/:slug",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/pages.js",
+            "route": "GET /contact",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/pages.js",
+            "route": "POST /contact",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/pages.js",
+            "route": "GET /faq",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/pages.js",
+            "route": "GET /home",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/progress.js",
+            "route": "GET /labs",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/progress.js",
+            "route": "GET /labs/check",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/progress.js",
+            "route": "GET /labs/docs/:file",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/shop.js",
+            "route": "GET /",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/shop.js",
+            "route": "GET /api/meta",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/shop.js",
+            "route": "POST /api/tags-filter",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/shop.js",
+            "route": "GET /products/:id",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/shop.js",
+            "route": "POST /products/:id/reviews",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/shop.js",
+            "route": "GET /search",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/tools.js",
+            "route": "GET /tools",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/tools.js",
+            "route": "POST /tools/fetch",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/tools.js",
+            "route": "POST /tools/regex",
+            "detail": "route not tested"
+          },
+          {
+            "file": "routes/tools.js",
+            "route": "GET /tools/vault-check",
+            "detail": "route not tested"
+          },
+          {
+            "file": "sast/seeds/clean-escaped.js",
+            "route": "GET /greet",
+            "detail": "route not tested"
+          },
+          {
+            "file": "sast/seeds/clean-escaped.js",
+            "route": "GET /redirect",
+            "detail": "route not tested"
+          },
+          {
+            "file": "sast/seeds/deserialization.js",
+            "route": "GET /ping",
+            "detail": "route not tested"
+          },
+          {
+            "file": "sast/seeds/deserialization.js",
+            "route": "POST /session",
+            "detail": "route not tested"
+          },
+          {
+            "file": "sast/seeds/eval-code.js",
+            "route": "POST /calc",
+            "detail": "route not tested"
+          },
+          {
+            "file": "sast/seeds/eval-code.js",
+            "route": "GET /greet/:name",
+            "detail": "route not tested"
+          },
+          {
+            "file": "sast/seeds/open-redirect.js",
+            "route": "GET /login",
+            "detail": "route not tested"
+          },
+          {
+            "file": "sast/seeds/open-redirect.js",
+            "route": "GET /out",
+            "detail": "route not tested"
+          },
+          {
+            "file": "sast/seeds/ssrf-fetch.js",
+            "route": "POST /preview",
+            "detail": "route not tested"
+          },
+          {
+            "file": "sast/seeds/xss-raw-echo.js",
+            "route": "GET /greet",
+            "detail": "route not tested"
+          },
+          {
+            "file": "sast/seeds/xss-raw-echo.js",
+            "route": "GET /profile",
+            "detail": "route not tested"
+          },
+          {
+            "file": "tests/exploits.js",
+            "route": "GET /account",
+            "detail": "route not tested"
+          },
+          {
+            "file": "tests/exploits.js",
+            "route": "GET /account",
+            "detail": "route not tested"
+          },
+          {
+            "file": "tests/exploits.js",
+            "route": "GET /api/meta?origin%5B%24ne%5D=null",
+            "detail": "route not tested"
+          },
+          {
+            "file": "tests/exploits.js",
+            "route": "GET /api/v1/me",
+            "detail": "route not tested"
+          },
+          {
+            "file": "tests/exploits.js",
+            "route": "GET /download?file=../../db/seed-data.js",
+            "detail": "route not tested"
+          },
+          {
+            "file": "tests/exploits.js",
+            "route": "GET /orders/1",
+            "detail": "route not tested"
+          },
+          {
+            "file": "tests/exploits.js",
+            "route": "GET /orders?sort=nope",
+            "detail": "route not tested"
+          },
+          {
+            "file": "tests/exploits.js",
+            "route": "GET /products/2",
+            "detail": "route not tested"
+          }
+        ],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            "config.js",
+            "db/init.js",
+            "db/seed-data.js",
+            "middleware/auth.js",
+            "mocks/imds/server.js",
+            "mocks/vault/server.js",
+            "model/db.js",
+            "model/merge.js",
+            "public/js/app.js",
+            "public/js/labs.js",
+            "routes/account.js",
+            "routes/api/v1.js",
+            "routes/auth.js",
+            "routes/extras.js",
+            "routes/orders.js",
+            "routes/pages.js",
+            "routes/progress.js",
+            "routes/shop.js",
+            "routes/tools.js",
+            "sast/seeds/clean-escaped.js"
+          ]
+        },
+        "state": "fail",
+        "confidence": "static-candidate",
+        "reason": "58 static violation(s); confirm with the acceptance condition",
+        "duration_ms": 0.075,
+        "receipt_sha256": "a03f9d7f407a017349837bac0c8b5ac6922a8e1b87da2ec471f18668e5ce3241"
+      },
+      {
+        "id": "E01-Contracts",
+        "version": "1.1",
+        "domain": "Contracts",
+        "family": "backend",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "API or SDK has consumers",
+        "required_evidence": "request response error schema and compatibility fixtures",
+        "acceptance_condition": "current and supported older clients handle success and errors",
+        "static_evaluator": "Contracts",
+        "runtime_adapters": [
+          "api_behaviour"
+        ],
+        "depends_on": [],
+        "severity": "medium",
+        "remediation": "Meet the required outcome: current and supported older clients handle success and errors.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "no UI sources"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "no UI sources",
+        "duration_ms": 0.014,
+        "receipt_sha256": "b80ef7a5337b494c1db8ddc9b08ad3e0b3a35a9fb81e8e6e6b7b8efdd91cb466"
+      },
+      {
+        "id": "E01-Configuration",
+        "version": "1.1",
+        "domain": "Configuration",
+        "family": "configuration",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "configuration differs by environment",
+        "required_evidence": "required variables defaults and startup validation",
+        "acceptance_condition": "missing required setting produces clear failure without leaking values",
+        "static_evaluator": "Configuration",
+        "runtime_adapters": [],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Declare the variable in a committed example dotenv file and validate required settings at startup with a clear error that does not print values.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            "APP_URL",
+            "DATABASE_URL",
+            "DEBUG_ERRORS",
+            "IMDS_URL",
+            "JWT_SECRET",
+            "MONGO_URL",
+            "PORT",
+            "SESSION_SECRET",
+            "VAULT_URL"
+          ]
+        },
+        "state": "unknown",
+        "confidence": "static",
+        "reason": "no violation found; acceptance evidence absent",
+        "duration_ms": 0.008,
+        "receipt_sha256": "0050bc02fa12e1a7f56c73423a48174e8355cbb432781b1cdb6a6d087f660a45"
+      },
+      {
+        "id": "E01-Recovery",
+        "version": "1.1",
+        "domain": "Recovery",
+        "family": "reliability",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "user credentials exist",
+        "required_evidence": "account recovery sign-out MFA disable and session revocation checks",
+        "acceptance_condition": "invalidated credentials lose access across services",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "recovery"
+        ],
+        "depends_on": [
+          "Persistence"
+        ],
+        "severity": "medium",
+        "remediation": "Meet the required outcome: invalidated credentials lose access across services.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            "POST /account",
+            "POST /account/token",
+            "POST /api/tags-filter",
+            "POST /auth/token",
+            "POST /calc",
+            "POST /checkout",
+            "POST /contact",
+            "POST /login/auth",
+            "POST /preferences",
+            "POST /preview",
+            "POST /products/:id/reviews",
+            "POST /register",
+            "POST /session",
+            "POST /tools/fetch",
+            "POST /tools/ping",
+            "POST /tools/regex"
+          ]
+        },
+        "state": "blocked",
+        "confidence": "none",
+        "reason": "dependency control(s) not satisfied: Persistence",
+        "duration_ms": 0.033,
+        "receipt_sha256": "ea618ddd201e30e2a6b5afde85027875189b2450ca2a0f6b752d1de70501bbfd"
+      },
+      {
+        "id": "E01-Isolation",
+        "version": "1.1",
+        "domain": "Isolation",
+        "family": "security",
+        "security": true,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "service stores data for teams",
+        "required_evidence": "role matrix tenant-bound reads writes background exports and storage policies",
+        "acceptance_condition": "cross-tenant operations denied through every supported path",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "authorization"
+        ],
+        "depends_on": [
+          "Tenancy"
+        ],
+        "severity": "high",
+        "remediation": "Meet the required outcome: cross-tenant operations denied through every supported path.",
+        "remediation_verification": "owner-frozen external acceptance with positive and negative cases, replayed by the kernel",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": null,
+          "evidence": [
+            "no ownership columns found; tenancy undetermined"
+          ]
+        },
+        "state": "blocked",
+        "confidence": "none",
+        "reason": "dependency control(s) not satisfied: Tenancy",
+        "duration_ms": 0.04,
+        "receipt_sha256": "d7cf787380dd6d55e369c9c67fd9bb5162e039e29cb9991a1a69df0e0abea575"
+      },
+      {
+        "id": "E01-Concurrency",
+        "version": "1.1",
+        "domain": "Concurrency",
+        "family": "reliability",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "retryable or simultaneous writes",
+        "required_evidence": "transactions uniqueness and parallel request tests",
+        "acceptance_condition": "one logical operation produces one durable effect",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "integration_tests"
+        ],
+        "depends_on": [],
+        "severity": "medium",
+        "remediation": "Meet the required outcome: one logical operation produces one durable effect.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            "POST /account",
+            "POST /account/token",
+            "POST /api/tags-filter",
+            "POST /auth/token",
+            "POST /calc",
+            "POST /checkout",
+            "POST /contact",
+            "POST /login/auth",
+            "POST /preferences",
+            "POST /preview",
+            "POST /products/:id/reviews",
+            "POST /register",
+            "POST /session",
+            "POST /tools/fetch",
+            "POST /tools/ping",
+            "POST /tools/regex"
+          ]
+        },
+        "state": "not_performed",
+        "confidence": "none",
+        "reason": "needs a concurrent-writer fixture",
+        "duration_ms": 0.048,
+        "receipt_sha256": "69cad7c0860925304846f83485db32ac4fdf0972f94bc5dfe08581733d0f70dc"
+      },
+      {
+        "id": "E01-Cache",
+        "version": "1.1",
+        "domain": "Cache",
+        "family": "data",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "application caches user or model data",
+        "required_evidence": "namespace freshness invalidation and eviction fixtures",
+        "acceptance_condition": "permission revocation and deletion clear stale access",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "integration_tests"
+        ],
+        "depends_on": [],
+        "severity": "medium",
+        "remediation": "Meet the required outcome: permission revocation and deletion clear stale access.",
+        "remediation_verification": "external acceptance that writes, restarts and reads back on the same store",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of aiocache, cachetools, ioredis, lru-cache, memcache, pymemcache imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of aiocache, cachetools, ioredis, lru-cache, memcache, pymemcache imported",
+        "duration_ms": 0.008,
+        "receipt_sha256": "ff6e2627e138595c6832a2bea08009fc1a6fb8e7b9b1aa8c86fc88d52d0bb6b4"
+      },
+      {
+        "id": "E01-Files",
+        "version": "1.1",
+        "domain": "Files",
+        "family": "security",
+        "security": true,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "product handles uploads or downloads",
+        "required_evidence": "type and size validation object ownership and failure cleanup",
+        "acceptance_condition": "only intended audience can retrieve completed files",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "api_behaviour"
+        ],
+        "depends_on": [],
+        "severity": "high",
+        "remediation": "Meet the required outcome: only intended audience can retrieve completed files.",
+        "remediation_verification": "owner-frozen external acceptance with positive and negative cases, replayed by the kernel",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of @aws-sdk, boto3, busboy, formidable, multer, multipart imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of @aws-sdk, boto3, busboy, formidable, multer, multipart imported",
+        "duration_ms": 0.007,
+        "receipt_sha256": "390807ae2d4aa79251b09413666b4773e907e6c9272a98e57c6e3786ae44aef3"
+      },
+      {
+        "id": "E01-Search",
+        "version": "1.1",
+        "domain": "Search",
+        "family": "data",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "product indexes data",
+        "required_evidence": "deletion permission changes empty results and rebuild checks",
+        "acceptance_condition": "results remain consistent with current source permissions",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "integration_tests"
+        ],
+        "depends_on": [],
+        "severity": "medium",
+        "remediation": "Meet the required outcome: results remain consistent with current source permissions.",
+        "remediation_verification": "external acceptance that writes, restarts and reads back on the same store",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of @elastic, algoliasearch, elasticsearch, meilisearch, opensearchpy, typesense imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of @elastic, algoliasearch, elasticsearch, meilisearch, opensearchpy, typesense imported",
+        "duration_ms": 0.006,
+        "receipt_sha256": "4682efef8c56800187cdf9bfd05994b6a20d50d4d212a13f787919c8bbc927f6"
+      },
+      {
+        "id": "E01-Webhook",
+        "version": "1.1",
+        "domain": "Webhook",
+        "family": "security",
+        "security": true,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "external events trigger actions",
+        "required_evidence": "signatures freshness idempotency and replay fixtures",
+        "acceptance_condition": "rejected events change no state and duplicates cause one effect",
+        "static_evaluator": "Webhook",
+        "runtime_adapters": [
+          "api_behaviour"
+        ],
+        "depends_on": [],
+        "severity": "high",
+        "remediation": "Meet the required outcome: rejected events change no state and duplicates cause one effect.",
+        "remediation_verification": "owner-frozen external acceptance with positive and negative cases, replayed by the kernel",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "no webhook routes"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "no webhook routes",
+        "duration_ms": 0.01,
+        "receipt_sha256": "6fffc7d9aa4b93b1fb89bcd553aeed6f29e44878915f6eb13257a33be0c75551"
+      },
+      {
+        "id": "E01-Integration",
+        "version": "1.1",
+        "domain": "Integration",
+        "family": "backend",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "third-party service involved",
+        "required_evidence": "sandbox contract token rotation timeout and reconciliation test",
+        "acceptance_condition": "unknown delivery reconciles before retry",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "integration_tests"
+        ],
+        "depends_on": [],
+        "severity": "medium",
+        "remediation": "Meet the required outcome: unknown delivery reconciles before retry.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of aiohttp, axios, got, httpx, node-fetch, requests imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of aiohttp, axios, got, httpx, node-fetch, requests imported",
+        "duration_ms": 0.006,
+        "receipt_sha256": "39c9857ac54359e8d2ad1e20b8e79c8ee7fa4ff5cc64a498ef4489ae983abb70"
+      },
+      {
+        "id": "E01-Network",
+        "version": "1.1",
+        "domain": "Network",
+        "family": "security",
+        "security": true,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "server calls external URLs",
+        "required_evidence": "outbound policy redirects and timeout behaviour",
+        "acceptance_condition": "only approved destinations used and failures bounded",
+        "static_evaluator": "Network",
+        "runtime_adapters": [],
+        "depends_on": [],
+        "severity": "high",
+        "remediation": "Meet the required outcome: only approved destinations used and failures bounded.",
+        "remediation_verification": "owner-frozen external acceptance with positive and negative cases, replayed by the kernel",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of aiohttp, axios, got, httpx, node-fetch, requests imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of aiohttp, axios, got, httpx, node-fetch, requests imported",
+        "duration_ms": 0.005,
+        "receipt_sha256": "338813e903e49b80cf6ab8c734d0e0a073cfdf1fe9b80fbdb728c21d0f2e97c7"
+      },
+      {
+        "id": "E01-WebDefences",
+        "version": "1.1",
+        "domain": "WebDefences",
+        "family": "security",
+        "security": true,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "browser application served",
+        "required_evidence": "security headers session cookies request origin and output handling",
+        "acceptance_condition": "configured protections verified on deployed routes",
+        "static_evaluator": "WebDefences",
+        "runtime_adapters": [
+          "api_behaviour"
+        ],
+        "depends_on": [],
+        "severity": "high",
+        "remediation": "Use parameterised queries, argument lists without shell, path normalisation within an allowed root, and never evaluate input.",
+        "remediation_verification": "owner-frozen external acceptance with positive and negative cases, replayed by the kernel",
+        "evidence": [],
+        "violations": [
+          {
+            "file": "middleware/auth.js",
+            "line": 8,
+            "detail": "open_redirect in requireLogin"
+          },
+          {
+            "file": "routes/auth.js",
+            "line": 38,
+            "detail": "open_redirect in <handler POST /login/auth@20>"
+          },
+          {
+            "file": "routes/shop.js",
+            "line": 84,
+            "detail": "open_redirect in <handler POST /products/:id/reviews@80>"
+          },
+          {
+            "file": "routes/tools.js",
+            "line": 21,
+            "detail": "ssrf in <handler POST /tools/fetch@19>"
+          },
+          {
+            "file": "sast/seeds/deserialization.js",
+            "line": 21,
+            "detail": "command_injection in <handler GET /ping@20>"
+          },
+          {
+            "file": "tests/exploits.js",
+            "line": 33,
+            "detail": "ssrf in run"
+          }
+        ],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            "GET /",
+            "GET /about",
+            "GET /account",
+            "GET /api/meta",
+            "GET /api/meta?origin%5B%24ne%5D=null",
+            "GET /api/v1/me",
+            "GET /categories/:slug",
+            "GET /checkout",
+            "GET /contact",
+            "GET /download",
+            "GET /download?file=../../db/seed-data.js",
+            "GET /faq",
+            "GET /greet",
+            "GET /greet/:name",
+            "GET /home",
+            "GET /labs",
+            "GET /labs/check",
+            "GET /labs/docs/:file",
+            "GET /login",
+            "GET /logout"
+          ]
+        },
+        "state": "fail",
+        "confidence": "static-candidate",
+        "reason": "6 static violation(s); confirm with the acceptance condition",
+        "duration_ms": 0.03,
+        "receipt_sha256": "f525a93dd7f807237288a5dcecd877b8c7d8f717c9cc164f552387abbe3a7f36"
+      },
+      {
+        "id": "E01-Secrets",
+        "version": "1.1",
+        "domain": "Secrets",
+        "family": "security",
+        "security": true,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "service credentials required",
+        "required_evidence": "release artifact and logs scanned for secret exposure",
+        "acceptance_condition": "credentials stay server-side and rotation is exercised",
+        "static_evaluator": "Secrets",
+        "runtime_adapters": [],
+        "depends_on": [],
+        "severity": "high",
+        "remediation": "Remove the credential from source control, rotate it, and load it at runtime from the environment or a secret manager.",
+        "remediation_verification": "owner-frozen external acceptance with positive and negative cases, replayed by the kernel",
+        "evidence": [],
+        "violations": [
+          {
+            "file": "db/seed-data.js",
+            "line": 140,
+            "name": "password",
+            "detail": "hard-coded credential literal"
+          },
+          {
+            "file": "db/seed-data.js",
+            "line": 142,
+            "name": "password",
+            "detail": "hard-coded credential literal"
+          },
+          {
+            "file": "mocks/imds/server.js",
+            "line": 6,
+            "name": "TOKEN",
+            "detail": "hard-coded credential literal"
+          },
+          {
+            "file": "sast/seeds/hardcoded-secret.js",
+            "line": 4,
+            "name": "API_SECRET",
+            "detail": "hard-coded credential literal"
+          },
+          {
+            "file": "sast/seeds/hardcoded-secret.js",
+            "line": 5,
+            "name": "DB_PASSWORD",
+            "detail": "hard-coded credential literal"
+          }
+        ],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            "repository"
+          ]
+        },
+        "state": "fail",
+        "confidence": "static-candidate",
+        "reason": "5 static violation(s); confirm with the acceptance condition",
+        "duration_ms": 0.008,
+        "receipt_sha256": "e66a534f722509cba95b6ff2f924098ef99146b5ba9a255f88c611c369b5d74b"
+      },
+      {
+        "id": "E01-SupplyChain",
+        "version": "1.1",
+        "domain": "SupplyChain",
+        "family": "supply-chain",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "third-party code ships",
+        "required_evidence": "pinned dependencies provenance licences notices and advisory review",
+        "acceptance_condition": "owner can reproduce inventory and replace affected dependency",
+        "static_evaluator": "SupplyChain",
+        "runtime_adapters": [
+          "supply_chain"
+        ],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Declare the dependency (pyproject or requirements) with a version constraint, or remove the import.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [
+          {
+            "file": "sast/seeds/deserialization.js",
+            "detail": "undeclared dependency node-serialize"
+          }
+        ],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            "config.js",
+            "db/init.js",
+            "db/seed-data.js",
+            "middleware/auth.js",
+            "mocks/imds/server.js",
+            "mocks/vault/server.js",
+            "model/db.js",
+            "model/merge.js",
+            "public/js/app.js",
+            "public/js/labs.js",
+            "routes/account.js",
+            "routes/api/v1.js",
+            "routes/auth.js",
+            "routes/extras.js",
+            "routes/orders.js",
+            "routes/pages.js",
+            "routes/progress.js",
+            "routes/shop.js",
+            "routes/tools.js",
+            "sast/seeds/clean-escaped.js"
+          ]
+        },
+        "state": "fail",
+        "confidence": "static-candidate",
+        "reason": "1 static violation(s); confirm with the acceptance condition",
+        "duration_ms": 0.016,
+        "receipt_sha256": "b00da9d51fd5799bebea298d30825a4b4f39eba902eb3ace45d1803c2502fb8e"
+      },
+      {
+        "id": "E01-Infrastructure",
+        "version": "1.1",
+        "domain": "Infrastructure",
+        "family": "operations",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "project provisions services",
+        "required_evidence": "isolated environments change preview storage permissions",
+        "acceptance_condition": "least privilege and rollback verified in staging",
+        "static_evaluator": null,
+        "runtime_adapters": [],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Meet the required outcome: least privilege and rollback verified in staging.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            "Dockerfile",
+            "docker-compose.yml",
+            "mocks/imds/Dockerfile",
+            "mocks/vault/Dockerfile"
+          ]
+        },
+        "state": "unsupported",
+        "confidence": "none",
+        "reason": "needs the deployed environment and its configuration",
+        "duration_ms": 0.048,
+        "receipt_sha256": "464dc80d543818f654a24fee16557b6185e710ade753a337e3584a4901079fe3"
+      },
+      {
+        "id": "E01-Observability",
+        "version": "1.1",
+        "domain": "Observability",
+        "family": "operations",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "app handles real requests",
+        "required_evidence": "structured logs redaction traces metrics and alert delivery",
+        "acceptance_condition": "owner can follow one failed customer journey",
+        "static_evaluator": "Observability",
+        "runtime_adapters": [],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Log the exception with context (logger.exception) or re-raise it so failures are traceable.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [
+          {
+            "file": "middleware/auth.js",
+            "line": 32,
+            "function": "requireApiToken",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/account.js",
+            "line": 22,
+            "function": "<handler GET /account@11>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/account.js",
+            "line": 33,
+            "function": "<handler POST /account@28>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/account.js",
+            "line": 64,
+            "function": "<handler POST /account/token@53>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/api/v1.js",
+            "line": 35,
+            "function": "<handler GET /me@29>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/api/v1.js",
+            "line": 45,
+            "function": "<handler GET /orders@38>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/api/v1.js",
+            "line": 52,
+            "function": "<handler GET /products@48>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/auth.js",
+            "line": 36,
+            "function": "<handler POST /login/auth@20>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/auth.js",
+            "line": 62,
+            "function": "<handler POST /register@50>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/orders.js",
+            "line": 44,
+            "function": "<handler POST /checkout@22>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/orders.js",
+            "line": 54,
+            "function": "<handler GET /orders@47>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/orders.js",
+            "line": 59,
+            "function": "<handler GET /orders@47>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/orders.js",
+            "line": 70,
+            "function": "<handler GET /orders/:id@66>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/pages.js",
+            "line": 12,
+            "function": "<handler GET /home@8>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/pages.js",
+            "line": 45,
+            "function": "<handler GET /categories/:slug@41>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/progress.js",
+            "line": 189,
+            "function": "runLab",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/progress.js",
+            "line": 218,
+            "function": "<handler GET /labs/check@209>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/shop.js",
+            "line": 16,
+            "function": "<handler GET /@12>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/shop.js",
+            "line": 24,
+            "function": "<handler GET /search@19>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/shop.js",
+            "line": 43,
+            "function": "<handler POST /api/tags-filter@35>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/shop.js",
+            "line": 60,
+            "function": "<handler GET /api/meta@51>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/shop.js",
+            "line": 73,
+            "function": "<handler GET /products/:id@67>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/shop.js",
+            "line": 85,
+            "function": "<handler POST /products/:id/reviews@80>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/tools.js",
+            "line": 30,
+            "function": "<handler POST /tools/fetch@19>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/tools.js",
+            "line": 47,
+            "function": "<handler POST /tools/regex@40>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "routes/tools.js",
+            "line": 61,
+            "function": "<handler GET /tools/vault-check@53>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "sast/seeds/ssrf-fetch.js",
+            "line": 15,
+            "function": "<handler POST /preview@10>",
+            "detail": "broad exception handler neither logs nor re-raises"
+          },
+          {
+            "file": "scripts/verify-fix.js",
+            "line": 40,
+            "function": "main",
+            "detail": "broad exception handler neither logs nor re-raises"
+          }
+        ],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            "config.js",
+            "db/init.js",
+            "db/seed-data.js",
+            "middleware/auth.js",
+            "mocks/imds/server.js",
+            "mocks/vault/server.js",
+            "model/db.js",
+            "model/merge.js",
+            "public/js/app.js",
+            "public/js/labs.js",
+            "routes/account.js",
+            "routes/api/v1.js",
+            "routes/auth.js",
+            "routes/extras.js",
+            "routes/orders.js",
+            "routes/pages.js",
+            "routes/progress.js",
+            "routes/shop.js",
+            "routes/tools.js",
+            "sast/seeds/clean-escaped.js"
+          ]
+        },
+        "state": "fail",
+        "confidence": "static-candidate",
+        "reason": "28 static violation(s); confirm with the acceptance condition",
+        "duration_ms": 0.035,
+        "receipt_sha256": "60695917d367a2557c5eb19f12b50431ad8eb472e9eccfac0eb260ed3f4ce600"
+      },
+      {
+        "id": "E01-Reliability",
+        "version": "1.1",
+        "domain": "Reliability",
+        "family": "reliability",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "service has availability targets",
+        "required_evidence": "SLO error budget runbooks and dependency outage drills",
+        "acceptance_condition": "recovery and escalation meet declared thresholds",
+        "static_evaluator": "Reliability",
+        "runtime_adapters": [
+          "unit_tests"
+        ],
+        "depends_on": [],
+        "severity": "medium",
+        "remediation": "Handle the specific exception, log it and surface failure to the caller instead of swallowing it.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [
+          {
+            "file": "routes/pages.js",
+            "line": 34,
+            "detail": "swallowed_exception in <handler POST /contact@24>"
+          },
+          {
+            "file": "tests/exploits.js",
+            "line": 63,
+            "detail": "swallowed_exception in run"
+          },
+          {
+            "file": "tests/exploits.js",
+            "line": 116,
+            "detail": "swallowed_exception in run"
+          },
+          {
+            "file": "tests/exploits.js",
+            "line": 146,
+            "detail": "swallowed_exception in run"
+          }
+        ],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            "config.js",
+            "db/init.js",
+            "db/seed-data.js",
+            "middleware/auth.js",
+            "mocks/imds/server.js",
+            "mocks/vault/server.js",
+            "model/db.js",
+            "model/merge.js",
+            "public/js/app.js",
+            "public/js/labs.js",
+            "routes/account.js",
+            "routes/api/v1.js",
+            "routes/auth.js",
+            "routes/extras.js",
+            "routes/orders.js",
+            "routes/pages.js",
+            "routes/progress.js",
+            "routes/shop.js",
+            "routes/tools.js",
+            "sast/seeds/clean-escaped.js"
+          ]
+        },
+        "state": "fail",
+        "confidence": "static-candidate",
+        "reason": "4 static violation(s); confirm with the acceptance condition",
+        "duration_ms": 0.022,
+        "receipt_sha256": "b8c6594d23d235fc6ef7088df90980a421cf567eb2185e085555313a533765d0"
+      },
+      {
+        "id": "E01-Load",
+        "version": "1.1",
+        "domain": "Load",
+        "family": "performance",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "service expects concurrent use",
+        "required_evidence": "representative dataset workload saturation and tail latency",
+        "acceptance_condition": "agreed limits hold under expected peak",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "resources"
+        ],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Meet the required outcome: agreed limits hold under expected peak.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            "GET /",
+            "GET /about",
+            "GET /account",
+            "GET /api/meta",
+            "GET /api/meta?origin%5B%24ne%5D=null",
+            "GET /api/v1/me",
+            "GET /categories/:slug",
+            "GET /checkout",
+            "GET /contact",
+            "GET /download",
+            "GET /download?file=../../db/seed-data.js",
+            "GET /faq",
+            "GET /greet",
+            "GET /greet/:name",
+            "GET /home",
+            "GET /labs",
+            "GET /labs/check",
+            "GET /labs/docs/:file",
+            "GET /login",
+            "GET /logout"
+          ]
+        },
+        "state": "not_performed",
+        "confidence": "none",
+        "reason": "needs an agreed latency and throughput budget",
+        "duration_ms": 0.025,
+        "receipt_sha256": "4398ab88d7f8562228565ceede30454e333716df41a1490f8b5867128beefd60"
+      },
+      {
+        "id": "E01-Cost",
+        "version": "1.1",
+        "domain": "Cost",
+        "family": "business",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "product consumes metered resources",
+        "required_evidence": "budget reservations concurrency limits and kill switch",
+        "acceptance_condition": "exhaustion produces clear user status with bounded spend",
+        "static_evaluator": null,
+        "runtime_adapters": [],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Meet the required outcome: exhaustion produces clear user status with bounded spend.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of @anthropic-ai, @langchain, ai, anthropic, cohere, google imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of @anthropic-ai, @langchain, ai, anthropic, cohere, google imported",
+        "duration_ms": 0.01,
+        "receipt_sha256": "3db22326660425aeb5a04104b4381c5c72b6634788b5e043324e570fff6f5e3c"
+      },
+      {
+        "id": "E01-Payments",
+        "version": "1.1",
+        "domain": "Payments",
+        "family": "business",
+        "security": true,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "plans change entitlements",
+        "required_evidence": "cancellation refunds failed renewals and downgrade tests",
+        "acceptance_condition": "invoice and access state reconcile",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "api_behaviour"
+        ],
+        "depends_on": [],
+        "severity": "high",
+        "remediation": "Meet the required outcome: invoice and access state reconcile.",
+        "remediation_verification": "owner-frozen external acceptance with positive and negative cases, replayed by the kernel",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of @paypal, adyen, braintree, lemonsqueezy, paypalrestsdk, square imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of @paypal, adyen, braintree, lemonsqueezy, paypalrestsdk, square imported",
+        "duration_ms": 0.008,
+        "receipt_sha256": "c67c8e8659d087237bbf3d1a9776817038a45e8135d0a028dd47f3affed218ec"
+      },
+      {
+        "id": "E01-Locale",
+        "version": "1.1",
+        "domain": "Locale",
+        "family": "frontend",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "multiple markets served",
+        "required_evidence": "locale currency plural timezone RTL and DST cases",
+        "acceptance_condition": "stored dates and displayed totals remain correct",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "integration_tests"
+        ],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Meet the required outcome: stored dates and displayed totals remain correct.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of @formatjs, babel, flask_babel, gettext, i18next, next-intl imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of @formatjs, babel, flask_babel, gettext, i18next, next-intl imported",
+        "duration_ms": 0.007,
+        "receipt_sha256": "7b4c64bec248c7bdaa01d03fb1befd58858f895d14512b14d1014ba06397d445"
+      },
+      {
+        "id": "E01-Email",
+        "version": "1.1",
+        "domain": "Email",
+        "family": "backend",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "email completes a customer journey",
+        "required_evidence": "delivery callback suppression unsubscribe and retry evidence",
+        "acceptance_condition": "status reflects actual delivery evidence",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "integration_tests"
+        ],
+        "depends_on": [],
+        "severity": "medium",
+        "remediation": "Meet the required outcome: status reflects actual delivery evidence.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of @sendgrid, flask_mail, mailgun, nodemailer, postmark, resend imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of @sendgrid, flask_mail, mailgun, nodemailer, postmark, resend imported",
+        "duration_ms": 0.006,
+        "receipt_sha256": "ea4c071655e826b2db44dabaf4fef7c41e9a9ef4e82f71fa12f9550689a6b5ff"
+      },
+      {
+        "id": "E01-Discovery",
+        "version": "1.1",
+        "domain": "Discovery",
+        "family": "frontend",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "public site launched",
+        "required_evidence": "canonical URLs sitemap redirects metadata and indexing policy",
+        "acceptance_condition": "public content discoverable and private content excluded from index",
+        "static_evaluator": null,
+        "runtime_adapters": [],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Meet the required outcome: public content discoverable and private content excluded from index.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "no UI sources"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "no UI sources",
+        "duration_ms": 0.019,
+        "receipt_sha256": "a20e8b398bd6ea34fc422e2f488d96f2045aeea65ad7f7864d9171159ce1f819"
+      },
+      {
+        "id": "E01-Portability",
+        "version": "1.1",
+        "domain": "Portability",
+        "family": "operations",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "customers can export data",
+        "required_evidence": "documented machine-readable export plus round-trip fixture",
+        "acceptance_condition": "import restores supported records and relationships",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "build"
+        ],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Meet the required outcome: import restores supported records and relationships.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            "config.js",
+            "db/init.js",
+            "db/seed-data.js",
+            "middleware/auth.js",
+            "mocks/imds/server.js",
+            "mocks/vault/server.js",
+            "model/db.js",
+            "model/merge.js",
+            "public/js/app.js",
+            "public/js/labs.js",
+            "routes/account.js",
+            "routes/api/v1.js",
+            "routes/auth.js",
+            "routes/extras.js",
+            "routes/orders.js",
+            "routes/pages.js",
+            "routes/progress.js",
+            "routes/shop.js",
+            "routes/tools.js",
+            "sast/seeds/clean-escaped.js"
+          ]
+        },
+        "state": "not_performed",
+        "confidence": "none",
+        "reason": "needs each target platform",
+        "duration_ms": 0.025,
+        "receipt_sha256": "1174e7647c3cac5a37b375cdc61d664625bf1e28c7aca1df74d2f9d4797aa9c7"
+      },
+      {
+        "id": "E01-Canary",
+        "version": "1.1",
+        "domain": "Canary",
+        "family": "operations",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "production rollout proposed",
+        "required_evidence": "versioned thresholds canary comparison and rollback drill",
+        "acceptance_condition": "regression stops rollout and previous version recovers",
+        "static_evaluator": null,
+        "runtime_adapters": [],
+        "depends_on": [
+          "Release"
+        ],
+        "severity": "low",
+        "remediation": "Meet the required outcome: regression stops rollout and previous version recovers.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            ".github/workflows/ci-hardened.yml",
+            ".github/workflows/ci.yml",
+            ".github/workflows/sast-benchmark.yml"
+          ]
+        },
+        "state": "blocked",
+        "confidence": "none",
+        "reason": "dependency control(s) not satisfied: Release",
+        "duration_ms": 0.028,
+        "receipt_sha256": "c8faeb3f0e33871ab93a6eda90a464b0850e912f07fc79be11f559dff254589c"
+      },
+      {
+        "id": "E01-Support",
+        "version": "1.1",
+        "domain": "Support",
+        "family": "business",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "real customers rely on service",
+        "required_evidence": "support contact owner escalation and incident exercise",
+        "acceptance_condition": "operator can triage and communicate incident",
+        "static_evaluator": null,
+        "runtime_adapters": [],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Meet the required outcome: operator can triage and communicate incident.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": null,
+          "evidence": [
+            "requires the owner's support commitments"
+          ]
+        },
+        "state": "unsupported",
+        "confidence": "none",
+        "reason": "needs the owner's support process",
+        "duration_ms": 0.004,
+        "receipt_sha256": "ebedf4a3a952ed558a95bfc84ca9fb04a7a9f348f55475ad022699df65acb041"
+      },
+      {
+        "id": "E01-Desktop",
+        "version": "1.1",
+        "domain": "Desktop",
+        "family": "frontend",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "desktop binary distributed",
+        "required_evidence": "signing update recovery local storage permissions and offline mode",
+        "acceptance_condition": "update interruption preserves user data",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "build"
+        ],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Meet the required outcome: update interruption preserves user data.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of @tauri-apps, electron, pyqt5, pyside6, tauri, tkinter imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of @tauri-apps, electron, pyqt5, pyside6, tauri, tkinter imported",
+        "duration_ms": 0.012,
+        "receipt_sha256": "1e917186b0d3c98a01ff6c74aac205f1000c6803e0d3df5362e335b1b6e30dda"
+      },
+      {
+        "id": "E01-Mobile",
+        "version": "1.1",
+        "domain": "Mobile",
+        "family": "frontend",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "mobile app distributed",
+        "required_evidence": "permission denial background resume offline sync and accessibility",
+        "acceptance_condition": "customer can recover after interruption",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "build"
+        ],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Meet the required outcome: customer can recover after interruption.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of @capacitor, expo, kivy, react-native imported",
+            "no mobile manifests"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of @capacitor, expo, kivy, react-native imported; no mobile manifests",
+        "duration_ms": 0.035,
+        "receipt_sha256": "ff8678c61735650fc457c51f1ef55b1861b879fe1eae1dbabd0475c101e3084d"
+      },
+      {
+        "id": "E01-CLI",
+        "version": "1.1",
+        "domain": "CLI",
+        "family": "backend",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "CLI shipped",
+        "required_evidence": "exit codes noninteractive flags signal interruption and error streams",
+        "acceptance_condition": "automation distinguishes success failure and partial work",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "unit_tests"
+        ],
+        "depends_on": [],
+        "severity": "medium",
+        "remediation": "Meet the required outcome: automation distinguishes success failure and partial work.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of argparse, click, commander, docopt, typer, yargs imported",
+            "no CLI entry points"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of argparse, click, commander, docopt, typer, yargs imported; no CLI entry points",
+        "duration_ms": 0.032,
+        "receipt_sha256": "2915bb73f684e538c3482b16347e5299ad722d0ee37b1968ebb6a45a38414375"
+      },
+      {
+        "id": "E01-SDK",
+        "version": "1.1",
+        "domain": "SDK",
+        "family": "backend",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "reusable library shipped",
+        "required_evidence": "versioned public API dependency bounds migration and compatibility tests",
+        "acceptance_condition": "supported versions and upgrade path verified",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "build",
+          "unit_tests"
+        ],
+        "depends_on": [],
+        "severity": "medium",
+        "remediation": "Meet the required outcome: supported versions and upgrade path verified.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "no package metadata"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "no package metadata",
+        "duration_ms": 0.017,
+        "receipt_sha256": "a4de03a3c3e75cc905824ca850eef8e2eb4f7012dcd72b81b50e2ba2f368144f"
+      },
+      {
+        "id": "E01-DataPipeline",
+        "version": "1.1",
+        "domain": "DataPipeline",
+        "family": "data",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "transformations or analytics jobs run",
+        "required_evidence": "schema drift late data deduplication and backfill fixtures",
+        "acceptance_condition": "reruns produce consistent results with lineage",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "integration_tests"
+        ],
+        "depends_on": [],
+        "severity": "medium",
+        "remediation": "Meet the required outcome: reruns produce consistent results with lineage.",
+        "remediation_verification": "external acceptance that writes, restarts and reads back on the same store",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of airflow, dagster, dbt, luigi, pandas, prefect imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of airflow, dagster, dbt, luigi, pandas, prefect imported",
+        "duration_ms": 0.01,
+        "receipt_sha256": "606385132acd9a080f33b5eeb2ec45127e86a69494aa742068407115e44c7c6c"
+      },
+      {
+        "id": "E01-ModelData",
+        "version": "1.1",
+        "domain": "ModelData",
+        "family": "ai",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "model trained or tuned",
+        "required_evidence": "dataset provenance split integrity leakage and version tracking",
+        "acceptance_condition": "held-out evaluation remains independent",
+        "static_evaluator": null,
+        "runtime_adapters": [],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Meet the required outcome: held-out evaluation remains independent.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of jax, keras, lightgbm, sklearn, tensorflow, torch imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of jax, keras, lightgbm, sklearn, tensorflow, torch imported",
+        "duration_ms": 0.007,
+        "receipt_sha256": "3fcb9e3290e55b3935183506d801195d5758572d9eddeba42cc1e72de910640e"
+      },
+      {
+        "id": "E01-AIEvals",
+        "version": "1.1",
+        "domain": "AIEvals",
+        "family": "ai",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "AI contributes to a user outcome",
+        "required_evidence": "versioned representative edge ambiguous and negative cases with graders",
+        "acceptance_condition": "regression thresholds agreed before candidate run",
+        "static_evaluator": null,
+        "runtime_adapters": [],
+        "depends_on": [
+          "AI"
+        ],
+        "severity": "low",
+        "remediation": "Meet the required outcome: regression thresholds agreed before candidate run.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of @anthropic-ai, @langchain, ai, anthropic, cohere, google imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of @anthropic-ai, @langchain, ai, anthropic, cohere, google imported",
+        "duration_ms": 0.007,
+        "receipt_sha256": "9c19e0b669cb579f0567bb30e38a2a696cf2a18a02e4025dbb3947383a4f7d69"
+      },
+      {
+        "id": "E01-AITrials",
+        "version": "1.1",
+        "domain": "AITrials",
+        "family": "ai",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "model output varies",
+        "required_evidence": "independent trials isolated state per trial and human grader calibration",
+        "acceptance_condition": "success distribution and cost reported across repeats",
+        "static_evaluator": null,
+        "runtime_adapters": [],
+        "depends_on": [
+          "AIEvals"
+        ],
+        "severity": "low",
+        "remediation": "Meet the required outcome: success distribution and cost reported across repeats.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of @anthropic-ai, @langchain, ai, anthropic, cohere, google imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of @anthropic-ai, @langchain, ai, anthropic, cohere, google imported",
+        "duration_ms": 0.005,
+        "receipt_sha256": "e4fe7ef02e77af1c0d6319189ad24cd8820f43b34e9336dda5d991f993cbab19"
+      },
+      {
+        "id": "E01-AIOutcome",
+        "version": "1.1",
+        "domain": "AIOutcome",
+        "family": "ai",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "agent changes environment",
+        "required_evidence": "final state and trajectory evidence",
+        "acceptance_condition": "observed world state matches task outcome",
+        "static_evaluator": null,
+        "runtime_adapters": [],
+        "depends_on": [
+          "AIEvals"
+        ],
+        "severity": "low",
+        "remediation": "Meet the required outcome: observed world state matches task outcome.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of @anthropic-ai, @langchain, ai, anthropic, cohere, google imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of @anthropic-ai, @langchain, ai, anthropic, cohere, google imported",
+        "duration_ms": 0.005,
+        "receipt_sha256": "9d025bc8e1de4f9899968f3983468e6b43723ff0bd2867f560c13d0314c2d6ed"
+      },
+      {
+        "id": "E01-Grounding",
+        "version": "1.1",
+        "domain": "Grounding",
+        "family": "ai",
+        "security": true,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "retrieved material supports claims",
+        "required_evidence": "citations supporting passages and permissions tests",
+        "acceptance_condition": "claims supported and inaccessible material withheld",
+        "static_evaluator": null,
+        "runtime_adapters": [],
+        "depends_on": [
+          "AIEvals"
+        ],
+        "severity": "high",
+        "remediation": "Meet the required outcome: claims supported and inaccessible material withheld.",
+        "remediation_verification": "owner-frozen external acceptance with positive and negative cases, replayed by the kernel",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of @anthropic-ai, @langchain, ai, anthropic, cohere, google imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of @anthropic-ai, @langchain, ai, anthropic, cohere, google imported",
+        "duration_ms": 0.005,
+        "receipt_sha256": "d9ccbd463271c3bc5d985766a96413e26d904296ed962ff694fbce0ed5f57944"
+      },
+      {
+        "id": "E01-AITrust",
+        "version": "1.1",
+        "domain": "AITrust",
+        "family": "ai",
+        "security": true,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "untrusted inputs reach model",
+        "required_evidence": "data boundaries tool permissions and approval binding",
+        "acceptance_condition": "untrusted content cannot widen authority",
+        "static_evaluator": null,
+        "runtime_adapters": [],
+        "depends_on": [],
+        "severity": "high",
+        "remediation": "Meet the required outcome: untrusted content cannot widen authority.",
+        "remediation_verification": "owner-frozen external acceptance with positive and negative cases, replayed by the kernel",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of @anthropic-ai, @langchain, ai, anthropic, cohere, google imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of @anthropic-ai, @langchain, ai, anthropic, cohere, google imported",
+        "duration_ms": 0.004,
+        "receipt_sha256": "6d43ac2a244f6056d43c8c06142c7c22f07069ab317cc5bf02b84fb3fe4e8152"
+      },
+      {
+        "id": "E01-AIRelease",
+        "version": "1.1",
+        "domain": "AIRelease",
+        "family": "ai",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "AI capability or provider changes",
+        "required_evidence": "model identity escalation thresholds mitigation owner and residual risk report",
+        "acceptance_condition": "owner signs off unresolved risks before staged rollout",
+        "static_evaluator": null,
+        "runtime_adapters": [],
+        "depends_on": [
+          "AIEvals"
+        ],
+        "severity": "low",
+        "remediation": "Meet the required outcome: owner signs off unresolved risks before staged rollout.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of @anthropic-ai, @langchain, ai, anthropic, cohere, google imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of @anthropic-ai, @langchain, ai, anthropic, cohere, google imported",
+        "duration_ms": 0.005,
+        "receipt_sha256": "90344b0e9a579b9185f5365f61b7b3f756434fd1b6bd2f3aa769d542ab88afbf"
+      },
+      {
+        "id": "E01-AIResources",
+        "version": "1.1",
+        "domain": "AIResources",
+        "family": "ai",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "agent executes loops",
+        "required_evidence": "tool time cost cancellation and retry bounds",
+        "acceptance_condition": "test covers cancellation partial completion and exhaustion",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "resources"
+        ],
+        "depends_on": [],
+        "severity": "low",
+        "remediation": "Meet the required outcome: test covers cancellation partial completion and exhaustion.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of @anthropic-ai, @langchain, ai, anthropic, cohere, google imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of @anthropic-ai, @langchain, ai, anthropic, cohere, google imported",
+        "duration_ms": 0.037,
+        "receipt_sha256": "ef3b0a7f383db59a8ab5f32b27472d85c6ed44da315f442b864804f17ecfeb62"
+      },
+      {
+        "id": "E01-AIChange",
+        "version": "1.1",
+        "domain": "AIChange",
+        "family": "ai",
+        "security": false,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "fixer modifies target",
+        "required_evidence": "diff against requirement and frozen regression suite",
+        "acceptance_condition": "weakened tests or revised acceptance criteria reviewed independently",
+        "static_evaluator": null,
+        "runtime_adapters": [],
+        "depends_on": [
+          "AIEvals"
+        ],
+        "severity": "low",
+        "remediation": "Meet the required outcome: weakened tests or revised acceptance criteria reviewed independently.",
+        "remediation_verification": "re-run the declared runtime adapters and the static evaluator on the repaired revision",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": false,
+          "evidence": [
+            "none of @anthropic-ai, @langchain, ai, anthropic, cohere, google imported"
+          ]
+        },
+        "state": "not_applicable",
+        "confidence": "static",
+        "reason": "none of @anthropic-ai, @langchain, ai, anthropic, cohere, google imported",
+        "duration_ms": 0.006,
+        "receipt_sha256": "2996441c1f540c5eb1313bd83f727f4d87c8da9e9f3800d21e4740ff12186e0d"
+      },
+      {
+        "id": "E01-Retention",
+        "version": "1.1",
+        "domain": "Retention",
+        "family": "privacy",
+        "security": true,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "private information stored",
+        "required_evidence": "retention schedules deletion verification and data-flow map",
+        "acceptance_condition": "policy matches actual lifecycle",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "persistence"
+        ],
+        "depends_on": [],
+        "severity": "high",
+        "remediation": "Meet the required outcome: policy matches actual lifecycle.",
+        "remediation_verification": "owner-frozen external acceptance with positive and negative cases, replayed by the kernel",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            "db/init.sql",
+            "pg"
+          ]
+        },
+        "state": "not_performed",
+        "confidence": "none",
+        "reason": "needs the owner's retention schedule",
+        "duration_ms": 0.036,
+        "receipt_sha256": "f713f5b8d191627e8bd89f035cd5a33d56a0ff437cb2be997ebe089a17aa80d4"
+      },
+      {
+        "id": "E01-Removal",
+        "version": "1.1",
+        "domain": "Removal",
+        "family": "privacy",
+        "security": true,
+        "revision": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+        "applicability_rule": "code or dependency proposed for removal",
+        "required_evidence": "references configuration dynamic loading migration and rollback plan",
+        "acceptance_condition": "supported callers continue working and owner approves destructive actions",
+        "static_evaluator": null,
+        "runtime_adapters": [
+          "persistence"
+        ],
+        "depends_on": [
+          "Privacy"
+        ],
+        "severity": "high",
+        "remediation": "Meet the required outcome: supported callers continue working and owner approves destructive actions.",
+        "remediation_verification": "owner-frozen external acceptance with positive and negative cases, replayed by the kernel",
+        "evidence": [],
+        "violations": [],
+        "applicability": {
+          "applies": true,
+          "evidence": [
+            "db/init.sql",
+            "pg"
+          ]
+        },
+        "state": "not_performed",
+        "confidence": "none",
+        "reason": "needs deletion propagation fixtures",
+        "duration_ms": 0.03,
+        "receipt_sha256": "d1342c851f4bcf4de604ea0f45417433074a6136bb4e5ff1007fd18926f823a9"
+      }
+    ],
+    "summary": {
+      "blocked": 4,
+      "fail": 9,
+      "not_applicable": 37,
+      "not_performed": 7,
+      "unknown": 4,
+      "unsupported": 5
+    },
+    "coverage": {
+      "domains": 66,
+      "static_evaluators": 21,
+      "runtime_backed": 42,
+      "no_evaluator": [
+        "AI",
+        "ML",
+        "Pricing",
+        "Jurisdiction",
+        "Intent",
+        "Infrastructure",
+        "Cost",
+        "Discovery",
+        "Canary",
+        "Support",
+        "ModelData",
+        "AIEvals",
+        "AITrials",
+        "AIOutcome",
+        "Grounding",
+        "AITrust",
+        "AIRelease",
+        "AIChange"
+      ],
+      "catalogue_domains_without_definition": []
+    },
+    "stale_acceptance": [],
+    "note": "pass requires acceptance evidence for this revision; static cleanliness alone is never a pass"
+  },
+  "runtime": null
+}

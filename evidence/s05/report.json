@@ -164,6 +164,70 @@
     "core/authHandler.js:43: Sequelize find({where})",
     "core/authHandler.js:72: Sequelize find({where})"
    ]
+  },
+  "cr0hn/vulnerable-node": {
+   "holdout": "holdout3",
+   "frozen_at": "2026-11-24T11:33:09+00:00",
+   "mislabelled": [],
+   "commit": "d68f2a3c9277ece2c2feb9976052033bdecd7fbe",
+   "summary": {
+    "blocked": 4,
+    "fail": 9,
+    "not_applicable": 37,
+    "not_performed": 7,
+    "unknown": 4,
+    "unsupported": 5
+   },
+   "resources": {
+    "wall_seconds": 1.83,
+    "max_child_rss_kib": 24176,
+    "exit": 0
+   },
+   "recall_documented": {
+    "tp": 1,
+    "n": 18,
+    "value": 0.056
+   },
+   "recall_modelled": {
+    "tp": 1,
+    "n": 7,
+    "value": 0.143
+   },
+   "unverified": [],
+   "false_negatives": [
+    "V01",
+    "V03",
+    "V03b",
+    "V04",
+    "V05",
+    "V06",
+    "V06b",
+    "V07",
+    "V09",
+    "V10",
+    "V11",
+    "V12",
+    "V13",
+    "V14",
+    "V15",
+    "V16",
+    "V17"
+   ],
+   "precision_reviewed_sample": {
+    "tp": 7,
+    "n": 15,
+    "value": 0.467
+   },
+   "false_positives": [
+    "middleware/auth.js:8: redirect target is the fixed path /login with an encoded parameter",
+    "routes/auth.js:38: redirect to fixed /login?returnurl=encodeURIComponent(...)",
+    "routes/shop.js:84: redirect to fixed /products/ prefix",
+    "tests/exploits.js:33: test harness request, not application code",
+    "routes/pages.js GET /categories/:slug: public catalogue route",
+    "routes/shop.js GET /products/:id: public catalogue route",
+    "sast/seeds/eval-code.js GET /greet/:name: no record access",
+    "routes/pages.js POST /contact: public contact form"
+   ]
   }
  },
  "coverage": {

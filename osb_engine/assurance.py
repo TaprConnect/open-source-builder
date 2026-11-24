@@ -229,7 +229,8 @@ def _tenancy(index):
     hits = [{"file": c["file"], "route": f"{'/'.join(c['methods'])} {c['path']}",
              "detail": "record addressed by identifier without authentication evidence (cross-user exposure candidate)"}
             for c in index.get("completeness", []) if c["auth"] == "not_detected"
-            and any(seg.startswith((":", "{", "<", "[")) for seg in c["path"].split("/"))]
+            and any(seg.startswith((":", "{", "<", "[")) for seg in c["path"].split("/"))
+            and (set(c["methods"]) & {"POST", "PUT", "PATCH", "DELETE"} or _PRIVATE_READ.search(c["path"]))]
     return applicable is not False, hits
 
 

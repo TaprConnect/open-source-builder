@@ -7,7 +7,7 @@ from osb_engine.controls import catalogue
 
 ev = Path(sys.argv[1] if len(sys.argv) > 1 else "evidence/s05")
 report = {"stage": "S05", "certified": False, "projects": {}, "coverage": {}, "blockers": []}
-for prefix in ("holdout", "holdout2"):
+for prefix in ("holdout", "holdout2", "holdout3"):
   truth = json.loads((ev / f"{prefix}_ground_truth.json").read_text())
   verdicts = json.loads((ev / f"{prefix}_verdicts.json").read_text())
   for project, spec in truth["projects"].items():

@@ -8,11 +8,9 @@ Read `DIRECTIVE_S05_S07.md` (requirements) and `registry.json` (status per requi
 - No worktrees in use. External reference repos are cloned only in the session scratchpad (untrusted).
 
 ## Next executable tasks
-1. S05 precision fixes measured on holdout 2: distinguish MongoDB queries from SQL ORM where-objects (imports of
-   mongoose/mongodb vs sequelize/typeorm/prisma); recognise `require('child_process').exec` member aliases; public
-   routes like /forgotpw; Identity for unauthenticated read APIs. Then a THIRD blind holdout (both measured ones are spent).
-2. S06: a second reference application (TypeScript/Express) through `osb autopilot`; S06-W1: classify Windows as
-   trusted-only for isolated analysis/verification (winacl.py covers store ACLs only).
-3. S07: create benchmarks/s07/<category>/ (incomplete, nonfunctional, unfamiliar, security+persistence, greenfield)
-   with owner-style requirements + external acceptance written before running `osb autopilot`; S07-006 stays blocked
-   (no approved live providers); S07-007 integrated report under evidence/s07/.
+1. S05: holdout 4 (holdouts 1-3 are spent; use a documented vulnerable app not yet cloned, e.g. a Flask or Django
+   lab with a published vulnerability list). Freeze ground truth first, run once, record verdicts, run tools/s05_report.py.
+   Known remaining gaps: model-layer (interprocedural) taint, fallback secrets (env || 'literal'), XSS/CSRF/ReDoS/
+   prototype pollution/mass assignment detectors, Python SSRF/deserialization.
+2. S06: second reference application (TypeScript/Express) through `osb autopilot`; S06-W1 Windows classification.
+3. S07: five reference categories under benchmarks/s07 with requirements + external acceptance written before running.

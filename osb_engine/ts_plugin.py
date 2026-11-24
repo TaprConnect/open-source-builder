@@ -122,12 +122,44 @@ def _route_path_from_file(path):
     return None, None
 
 
-def _request_derived(node, source, budget):
+def _request_derived(node, source, budget, tainted=frozenset()):
     for n in _walk(node, budget):
         if n.type == "member_expression":
             name = _callee(n, source) or ""
             if name.split(".", 1)[0] in _REQUEST_ROOTS and "." in name:
                 return True
+        elif n.type == "identifier" and tainted and _text(n, source) in tainted:
+            return True
+    return False
+
+
+def _tainted_locals(body, source, budget):
+    """Intraprocedural propagation: local names assigned from request data (two passes for chains)."""
+    tainted = set()
+    for _ in range(2):
+        for n in _walk_own(body, budget):
+            if n.type == "variable_declarator":
+                target, value = n.child_by_field_name("name"), n.child_by_field_name("value")
+            elif n.type == "assignment_expression":
+                target, value = n.child_by_field_name("left"), n.child_by_field_name("right")
+            else:
+                continue
+            if target is None or value is None or not _request_derived(value, source, budget, frozenset(tainted)):
+                continue
+            tainted.update(_text(i, source) for i in _walk(target, budget)
+                           if i.type in ("identifier", "shorthand_property_identifier_pattern"))
+    return frozenset(tainted)
+
+
+def _starts_with_literal(node, source):
+    """True when a URL expression begins with fixed text (for example "/login?next=" + x)."""
+    if node.type == "string":
+        return True
+    if node.type == "template_string":
+        return not _text(node, source)[1:].startswith("${")
+    if node.type == "binary_expression":
+        left = node.child_by_field_name("left")
+        return left is not None and _starts_with_literal(left, source)
     return False
 
 
@@ -248,6 +280,10 @@ def _facts(path, root, source):
         if body is None:
             return
         statements = [c for c in body.named_children if c.type != "comment"] if body.type == "statement_block" else [body]
+        tainted = _tainted_locals(body, source, budget)
+
+        def derived(x):
+            return _request_derived(x, source, budget, tainted)
         if body.type == "statement_block" and not statements:
             issues.append({"kind": "placeholder", "function": name, "line": node.start_point[0] + 1})
         for n in _walk_own(body, budget):
@@ -264,20 +300,20 @@ def _facts(path, root, source):
                     first = args.named_children[0] if args is not None and args.named_children else None
                     if first is not None:
                         shell = last in _SHELL_SINKS and (head in shell_aliases or not head and last in shell_aliases)
-                        if shell and _request_derived(args, source, budget):
+                        if shell and derived(args):
                             taint.append({"kind": "command_injection", "function": name, "line": n.start_point[0] + 1})
-                        elif not shell and last in _SQL_SINKS and _dynamic_string(first) and _request_derived(first, source, budget):
+                        elif not shell and last in _SQL_SINKS and _dynamic_string(first) and derived(first):
                             taint.append({"kind": "sql_injection", "function": name, "line": n.start_point[0] + 1})
-                        elif last in _FS_SINKS and _request_derived(first, source, budget):
+                        elif last in _FS_SINKS and derived(first):
                             taint.append({"kind": "path_traversal", "function": name, "line": n.start_point[0] + 1})
                     if first is not None and last in _NOSQL_SINKS and first.type in ("object", "identifier", "member_expression") \
                             and _request_object(first, source, budget):
                         taint.append({"kind": "nosql_injection", "function": name, "line": n.start_point[0] + 1})
-                    if first is not None and last == "redirect" and _request_derived(first, source, budget):
+                    if first is not None and last == "redirect" and derived(first) and not _starts_with_literal(first, source):
                         taint.append({"kind": "open_redirect", "function": name, "line": n.start_point[0] + 1})
-                    if first is not None and last in _HTTP_CLIENTS and _request_derived(first, source, budget):
+                    if first is not None and last in _HTTP_CLIENTS and derived(first):
                         taint.append({"kind": "ssrf", "function": name, "line": n.start_point[0] + 1})
-                    if target in ("eval", "Function") and args is not None and _request_derived(args, source, budget):
+                    if target in ("eval", "Function") and args is not None and derived(args):
                         taint.append({"kind": "code_injection", "function": name, "line": n.start_point[0] + 1})
             elif n.type == "assignment_expression":
                 left = n.child_by_field_name("left")

@@ -153,3 +153,22 @@ class PrecisionRound2(unittest.TestCase):
         self.assertEqual(sql["taint"], [])
         mongo = build_index(repo_with({"package.json": b'{"dependencies": {"mongoose": "6"}}', "h.js": handler}))
         self.assertEqual([t["kind"] for t in mongo["taint"]], ["nosql_injection"])
+
+
+class DataFlowRound3(unittest.TestCase):
+    """Fixes measured on holdout 3 (cr0hn/vulnerable-node); not holdout evidence."""
+
+    def kinds(self, src):
+        return sorted(t["kind"] for t in plugins.extract("javascript", src, "r.js")["facts"]["taint"])
+
+    def test_request_data_through_local_variables(self):
+        self.assertEqual(self.kinds(
+            b'const { exec } = require("child_process");\n'
+            b'router.post("/ping", (req, res) => { const host = req.body.host || "x"; const cmd = `ping ${host}`; exec(cmd); });\n'
+            b'router.get("/dl", (req, res) => { const name = req.query.file; fs.readFile(path.join(DIR, name), cb); });\n'),
+            ["command_injection", "path_traversal"])
+
+    def test_redirects_to_fixed_local_paths_are_not_open(self):
+        self.assertEqual(self.kinds(b'app.get("/a", (req, res) => { res.redirect("/login?next=" + encodeURIComponent(req.originalUrl)); });\n'
+                                    b'app.get("/b", (req, res) => { res.redirect(`/products/${req.params.id}`); });\n'), [])
+        self.assertEqual(self.kinds(b'app.get("/c", (req, res) => { const u = req.query.url; res.redirect(u); });\n'), ["open_redirect"])

@@ -1,0 +1,131 @@
+{
+ "reviewer": "implementing agent (not independent); each verdict cites the inspected line",
+ "detections": {
+  "V01": "FN",
+  "V02": "TP",
+  "V03": "FN",
+  "V03b": "FN",
+  "V04": "FN",
+  "V05": "FN",
+  "V06": "FN",
+  "V06b": "FN",
+  "V07": "FN",
+  "V09": "FN",
+  "V10": "FN",
+  "V11": "FN",
+  "V12": "FN",
+  "V13": "FN",
+  "V14": "FN",
+  "V15": "FN",
+  "V16": "FN",
+  "V17": "FN"
+ },
+ "reported_security_findings": [
+  {
+   "project": "vulnerable-node",
+   "domain": "WebDefences",
+   "where": "middleware/auth.js:8",
+   "verdict": "FP",
+   "why": "redirect target is the fixed path /login with an encoded parameter"
+  },
+  {
+   "project": "vulnerable-node",
+   "domain": "WebDefences",
+   "where": "routes/auth.js:38",
+   "verdict": "FP",
+   "why": "redirect to fixed /login?returnurl=encodeURIComponent(...)"
+  },
+  {
+   "project": "vulnerable-node",
+   "domain": "WebDefences",
+   "where": "routes/shop.js:84",
+   "verdict": "FP",
+   "why": "redirect to fixed /products/ prefix"
+  },
+  {
+   "project": "vulnerable-node",
+   "domain": "WebDefences",
+   "where": "routes/tools.js:21",
+   "verdict": "TP",
+   "why": "fetch(req.body.url): SSRF (V02)"
+  },
+  {
+   "project": "vulnerable-node",
+   "domain": "WebDefences",
+   "where": "sast/seeds/deserialization.js:21",
+   "verdict": "TP",
+   "why": "exec('ping -c 1 ' + req.query.host): command injection (seed file, not V16's location)"
+  },
+  {
+   "project": "vulnerable-node",
+   "domain": "WebDefences",
+   "where": "tests/exploits.js:33",
+   "verdict": "FP",
+   "why": "test harness request, not application code"
+  },
+  {
+   "project": "vulnerable-node",
+   "domain": "Secrets",
+   "where": "db/seed-data.js:140",
+   "verdict": "TP",
+   "why": "hard-coded password"
+  },
+  {
+   "project": "vulnerable-node",
+   "domain": "Secrets",
+   "where": "db/seed-data.js:142",
+   "verdict": "TP",
+   "why": "hard-coded admin password"
+  },
+  {
+   "project": "vulnerable-node",
+   "domain": "Secrets",
+   "where": "mocks/imds/server.js:6",
+   "verdict": "TP",
+   "why": "hard-coded token"
+  },
+  {
+   "project": "vulnerable-node",
+   "domain": "Secrets",
+   "where": "sast/seeds/hardcoded-secret.js:4",
+   "verdict": "TP",
+   "why": "hard-coded API secret"
+  },
+  {
+   "project": "vulnerable-node",
+   "domain": "Secrets",
+   "where": "sast/seeds/hardcoded-secret.js:5",
+   "verdict": "TP",
+   "why": "hard-coded DB password"
+  },
+  {
+   "project": "vulnerable-node",
+   "domain": "Tenancy",
+   "where": "routes/pages.js GET /categories/:slug",
+   "verdict": "FP",
+   "why": "public catalogue route"
+  },
+  {
+   "project": "vulnerable-node",
+   "domain": "Tenancy",
+   "where": "routes/shop.js GET /products/:id",
+   "verdict": "FP",
+   "why": "public catalogue route"
+  },
+  {
+   "project": "vulnerable-node",
+   "domain": "Tenancy",
+   "where": "sast/seeds/eval-code.js GET /greet/:name",
+   "verdict": "FP",
+   "why": "no record access"
+  },
+  {
+   "project": "vulnerable-node",
+   "domain": "Identity",
+   "where": "routes/pages.js POST /contact",
+   "verdict": "FP",
+   "why": "public contact form"
+  }
+ ],
+ "not_reviewed": "6 of 7 Identity findings and all 28 Observability findings were not individually verified"
+}

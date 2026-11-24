@@ -72,57 +72,89 @@
    "status": "in_progress",
    "implementation": [],
    "tests": [],
-   "evidence": [],
-   "notes": "Development set: OWASP NodeGoat c5cb68a, anxolerd/dvpwa 4a8f4a4 (tuned against). Holdout set not yet selected or measured. Precision/recall report not yet published."
+   "evidence": [
+    "evidence/s05/report.json",
+    "evidence/s05/holdout_ground_truth.json"
+   ],
+   "notes": "Blind holdout measured, NOT certified: nodejs-goof 0/9, pygoat 3/12 documented defects; reviewed precision 10/12 overall. JS gaps: credentials, command-sink receivers, NoSQL/XSS/redirect/prototype pollution."
   },
   "S06-001": {
-   "status": "not_started",
-   "implementation": [],
-   "tests": [],
+   "status": "implemented_unverified",
+   "implementation": [
+    "osb_engine/product.py"
+   ],
+   "tests": [
+    "test_autopilot.py"
+   ],
    "evidence": [],
-   "notes": ""
+   "notes": "Confirmed (owner file) vs inferred (repository) vs unresolved decisions."
   },
   "S06-002": {
-   "status": "not_started",
-   "implementation": [],
-   "tests": [],
+   "status": "implemented_unverified",
+   "implementation": [
+    "osb_engine/product.py"
+   ],
+   "tests": [
+    "test_autopilot.py"
+   ],
    "evidence": [],
-   "notes": ""
+   "notes": "Persistent per-revision graph in kernel SQLite with diff(); UI\u2192route\u2192function\u2192store\u2192external, tests, evidence."
   },
   "S06-003": {
-   "status": "not_started",
-   "implementation": [],
-   "tests": [],
+   "status": "implemented_unverified",
+   "implementation": [
+    "osb_engine/autopilot.py"
+   ],
+   "tests": [
+    "test_autopilot.py"
+   ],
    "evidence": [],
-   "notes": ""
+   "notes": "Kernel tasks per owner requirement with all required fields; idempotent via Store.save identity."
   },
   "S06-004": {
-   "status": "not_started",
-   "implementation": [],
-   "tests": [],
+   "status": "implemented_unverified",
+   "implementation": [
+    "osb_engine/repairs.py",
+    "osb_engine/autopilot.py"
+   ],
+   "tests": [
+    "test_autopilot.py"
+   ],
    "evidence": [],
-   "notes": ""
+   "notes": "Deterministic AST repairs: persistence, ownership, CRUD completion, validation; scope-checked; reverted on failed acceptance."
   },
   "S06-005": {
-   "status": "not_started",
-   "implementation": [],
-   "tests": [],
+   "status": "implemented_unverified",
+   "implementation": [
+    "osb_engine/providers.py"
+   ],
+   "tests": [
+    "test_autopilot.py"
+   ],
    "evidence": [],
-   "notes": ""
+   "notes": "Deterministic, mock (interface only), Anthropic and OpenAI backends; live backends blocked without owner approval and key. No live call made."
   },
   "S06-006": {
-   "status": "not_started",
-   "implementation": [],
-   "tests": [],
+   "status": "implemented_unverified",
+   "implementation": [
+    "osb_engine/autopilot.py"
+   ],
+   "tests": [
+    "test_autopilot.py"
+   ],
    "evidence": [],
-   "notes": ""
+   "notes": "Loop with resume, bounded attempts, pause/revocation/stale-plan stop, escalation."
   },
   "S06-007": {
-   "status": "not_started",
-   "implementation": [],
-   "tests": [],
+   "status": "in_progress",
+   "implementation": [
+    "osb_engine/autopilot.py"
+   ],
+   "tests": [
+    "test_autopilot.py"
+   ],
    "evidence": [],
-   "notes": ""
+   "notes": "External acceptance per task; failing baseline, rollback, protected-path rejection and hostile README/decoy covered. Restart-persistence verified inside one sandbox call."
   },
   "S06-W1": {
    "status": "not_started",
@@ -132,11 +164,13 @@
    "notes": ""
   },
   "S06-ACCEPT": {
-   "status": "not_started",
+   "status": "in_progress",
    "implementation": [],
-   "tests": [],
+   "tests": [
+    "test_autopilot.py"
+   ],
    "evidence": [],
-   "notes": ""
+   "notes": "OSB loop completed 4/4 requirements on an incomplete notes service it did not write repairs for. Fixture and requirements authored by the implementing agent; only one application exercised."
   },
   "S07-001": {
    "status": "not_started",

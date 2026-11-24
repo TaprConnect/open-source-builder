@@ -224,6 +224,14 @@ def _main(argv):
     assure_parser.add_argument('--analysis-cpu', type=int, default=10)
     assure_parser.add_argument('--analysis-memory', type=int, default=512)
     assure_parser.add_argument('--analysis-budget', type=int, default=1800)
+    auto_parser = sub.add_parser('autopilot', description='Trusted supervisor only. Understand, plan and repair against private owner requirements (S06).')
+    auto_parser.add_argument('repository')
+    auto_parser.add_argument('database')
+    auto_parser.add_argument('requirements', help='private owner requirements JSON (outside the repository)')
+    auto_parser.add_argument('--provider', default='deterministic', choices=('deterministic', 'anthropic', 'openai'))
+    auto_parser.add_argument('--model')
+    auto_parser.add_argument('--budget-seconds', type=int, default=3600)
+    auto_parser.add_argument('--plan-only', action='store_true')
     cancel_parser = sub.add_parser('cancel', description='Trusted supervisor only. Cancels a task (terminal).')
     for field in ('repository', 'database', 'run_id', 'task_id'):
         cancel_parser.add_argument(field)
@@ -346,6 +354,27 @@ def _main(argv):
                             raise ValueError('acceptance records must be a JSON list')
                         output = {'assurance': assurance.evaluate(catalogue(a.catalogue), output, observed, records, a.budget),
                                   'runtime': observed}
+                elif a.command == 'autopilot':
+                    from . import autopilot as auto, product as prod, providers as prov
+                    requirements_path = repo.private_path(a.requirements)
+                    spec = prod.load_requirements(requirements_path)
+                    if not isolation_available():
+                        raise ValueError('autopilot requires OS isolation for analysis and verification')
+                    extractor = isolated_map(repo.root, plugins_module, 'extract', valid_facts)
+                    index = build_index(repo, extractor)
+                    facts = prod.python_facts(repo, index, extractor)
+                    understanding = prod.understand(repo, index, spec, facts)
+                    nodes, edges = prod.build_graph(index, spec, facts)
+                    graph = prod.persist(store, index['revision'], nodes, edges)
+                    run_id, tasks = auto.plan(store, spec, requirements_path.parent, understanding, facts)
+                    output = {'understanding': understanding, 'graph': graph, 'gaps': prod.gaps(nodes, edges),
+                              'run_id': run_id, 'tasks': tasks}
+                    if not a.plan_only:
+                        scripts = {t['id']: (requirements_path.parent / next(r['acceptance'] for r in spec['requirements']
+                                                                             if r['id'] == t['requirement'])).read_bytes() for t in tasks}
+                        provider = prov.build(a.provider, repo.root, **({'model': a.model} if a.provider != 'deterministic' else {}))
+                        output['loop'] = auto.run(store, run_id, tasks, scripts, provider,
+                                                  deadline=time.monotonic() + a.budget_seconds)
                 elif a.command == 'cancel':
                     output = store.cancel(a.run_id, a.task_id, a.reason)
                 elif a.command == 'export-plan':

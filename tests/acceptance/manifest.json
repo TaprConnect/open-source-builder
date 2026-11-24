@@ -165,7 +165,18 @@
   "frozen_hash_verified": true,
   "platform": "linux",
   "sha256": "8d04077bf74e36d5775c44ebbc680122e84abae3e02153c4ad99494b2dc20e4b",
+  "superseded_by": "s04_001v2",
+  "superseded_reason": "owner directive 2026-11-24 S05-009 requires TypeScript/JavaScript parsing; only the assertion that TS is unsupported changed",
   "task": "S04-001"
+ },
+ "s04_001v2": {
+  "approved": "owner, 2026-11-24 (session decision on blocker B1)",
+  "frozen_before_implementation": false,
+  "frozen_hash_verified": true,
+  "platform": "linux",
+  "revises": "s04_001",
+  "sha256": "667bb1ee3b684dc0016f4e08874e0f081b9a1cefefc7d6047c296caf4dc1b146",
+  "task": "S04-001-V2"
  },
  "s04_002": {
   "frozen_hash_verified": true,
@@ -189,7 +200,18 @@
   "frozen_hash_verified": true,
   "platform": "linux",
   "sha256": "4323654313250aee4565703537c977726e0462caa76ac65bf4aa578c65d7cef9",
+  "superseded_by": "s04_005v2",
+  "superseded_reason": "owner directive 2026-11-24 S05-009 requires TypeScript/JavaScript parsing; only the assertion that TS is unsupported changed",
   "task": "S04-005"
+ },
+ "s04_005v2": {
+  "approved": "owner, 2026-11-24 (session decision on blocker B1)",
+  "frozen_before_implementation": false,
+  "frozen_hash_verified": true,
+  "platform": "linux",
+  "revises": "s04_005",
+  "sha256": "58c3b80a19b00592e8d54d8e7da719118c5f0b672e09bad867f6d09cdf97b4be",
+  "task": "S04-005-V2"
  },
  "s04_006": {
   "frozen_hash_verified": true,

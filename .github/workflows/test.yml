@@ -55,7 +55,7 @@ jobs:
               | grep -v "test_frozen" | grep -q .; then
             echo "::error::unit tests skipped"; exit 1
           fi
-          if grep -h "skipped '" "$RUNNER_TEMP/acceptance.log" | grep -vq "Windows-only acceptance"; then
-            echo "::error::acceptance scripts skipped for a reason other than Windows-only"; exit 1
+          if grep -h "skipped '" "$RUNNER_TEMP/acceptance.log" | grep -v "Windows-only acceptance" | grep -vq "superseded by "; then
+            echo "::error::acceptance scripts skipped for a reason other than Windows-only or a recorded supersession"; exit 1
           fi
       - run: python3 scanner.py . > "$RUNNER_TEMP/inventory.json"

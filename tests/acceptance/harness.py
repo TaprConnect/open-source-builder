@@ -32,6 +32,8 @@ def script(name):
 
 def supported(name):
     """Return None when the script can run here, else the reason it cannot."""
+    if MANIFEST[name].get("superseded_by"):
+        return f"superseded by {MANIFEST[name]['superseded_by']}: {MANIFEST[name]['superseded_reason']}"
     platform = MANIFEST[name]["platform"]
     if platform == "windows" and os.name != "nt":
         return "Windows-only acceptance"

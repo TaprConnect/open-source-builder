@@ -53,7 +53,7 @@
     "test_ts_plugin.py"
    ],
    "evidence": [],
-   "notes": "tree-sitter TS/TSX/JS; SQL dialect classification. BLOCKED IN CI: frozen s04_001 line 41 and s04_005 line 19 assert TS is unsupported; owner decision pending. Tests were written alongside implementation, not frozen before it."
+   "notes": "tree-sitter TS/TSX/JS; SQL dialect classification. Frozen s04_001/s04_005 superseded by owner-approved v2 scripts. Unit tests written alongside implementation, not frozen before it."
   },
   "S05-010": {
    "status": "in_progress",
@@ -190,11 +190,6 @@
  },
  "blockers": [
   {
-   "id": "B1",
-   "requirement": "S05-009",
-   "detail": "Frozen acceptance s04_001 (line 41) and s04_005 (line 19) require TypeScript to be unsupported; revising frozen acceptance requires owner approval (agent attempt was correctly denied)."
-  },
-  {
    "id": "B2",
    "requirement": "S07-006",
    "detail": "No live model provider credentials or paid-API approval."
@@ -203,6 +198,12 @@
    "id": "B3",
    "requirement": "local-acceptance",
    "detail": "This container cannot nest bubblewrap (/proc mount denied); the frozen suite runs only in CI. tools/run_frozen_local.py is a developer approximation."
+  }
+ ],
+ "resolved": [
+  {
+   "id": "B1",
+   "resolution": "Owner approved revised scripts s04_001v2/s04_005v2 on 2026-11-24; originals kept byte-exact and marked superseded in tests/acceptance/manifest.json."
   }
  ]
 }

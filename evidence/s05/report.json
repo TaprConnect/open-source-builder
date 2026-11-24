@@ -1,0 +1,154 @@
+{
+ "stage": "S05",
+ "certified": false,
+ "projects": {
+  "snyk-labs/nodejs-goof": {
+   "commit": "add14ba59e98240d9e00a235dd7d42cd61ae9912",
+   "summary": {
+    "blocked": 4,
+    "fail": 7,
+    "not_applicable": 31,
+    "not_performed": 8,
+    "unknown": 10,
+    "unsupported": 6
+   },
+   "resources": {
+    "wall_seconds": 0.6,
+    "max_child_rss_kib": 30224,
+    "exit": 0
+   },
+   "recall_documented": {
+    "tp": 0,
+    "n": 9,
+    "value": 0.0
+   },
+   "recall_modelled": {
+    "tp": 0,
+    "n": 4,
+    "value": 0.0
+   },
+   "unverified": [],
+   "false_negatives": [
+    "G1",
+    "G2",
+    "G3",
+    "G4",
+    "G5",
+    "G6",
+    "G7",
+    "G8",
+    "G9"
+   ],
+   "precision_reviewed_sample": {
+    "tp": 0,
+    "n": 1,
+    "value": 0.0
+   },
+   "false_positives": [
+    "routes/index.js:217: Mongoose Query.exec(callback), not a shell exec"
+   ]
+  },
+  "adeyosemanputra/pygoat": {
+   "commit": "2aa4cc14f251e4a780e94e200aed6b36a5b15c21",
+   "summary": {
+    "blocked": 4,
+    "fail": 12,
+    "not_applicable": 27,
+    "not_performed": 10,
+    "unknown": 7,
+    "unsupported": 6
+   },
+   "resources": {
+    "wall_seconds": 3.33,
+    "max_child_rss_kib": 26280,
+    "exit": 0
+   },
+   "recall_documented": {
+    "tp": 3,
+    "n": 12,
+    "value": 0.25
+   },
+   "recall_modelled": {
+    "tp": 3,
+    "n": 5,
+    "value": 0.6
+   },
+   "unverified": [
+    "P6",
+    "P11"
+   ],
+   "false_negatives": [
+    "P3",
+    "P5",
+    "P7",
+    "P8",
+    "P9",
+    "P10",
+    "P12"
+   ],
+   "precision_reviewed_sample": {
+    "tp": 10,
+    "n": 11,
+    "value": 0.909
+   },
+   "false_positives": [
+    "dockerized_labs/a9_uckv_lab/app.py:89: Image.open on an upload object; the documented issue is a vulnerable Pillow version, not path traversal"
+   ]
+  }
+ },
+ "coverage": {
+  "domains": 66,
+  "static_evaluator": 21,
+  "runtime_adapter": 42,
+  "no_executable_evaluator": [
+   "AI",
+   "ML",
+   "Pricing",
+   "Jurisdiction",
+   "Intent",
+   "Infrastructure",
+   "Cost",
+   "Discovery",
+   "Canary",
+   "Support",
+   "ModelData",
+   "AIEvals",
+   "AITrials",
+   "AIOutcome",
+   "Grounding",
+   "AITrust",
+   "AIRelease",
+   "AIChange"
+  ],
+  "static_domains": [
+   "Identity",
+   "Tenancy",
+   "Persistence",
+   "Backend",
+   "Frontend",
+   "Accessibility",
+   "Database",
+   "Release",
+   "Security",
+   "Architecture",
+   "Build",
+   "Quality",
+   "Contracts",
+   "Configuration",
+   "Webhook",
+   "Network",
+   "WebDefences",
+   "Secrets",
+   "SupplyChain",
+   "Observability",
+   "Reliability"
+  ]
+ },
+ "blockers": [
+  "Runtime adapters cannot install dependencies (isolated runs have no network), so most real projects' tests are blocked.",
+  "Security passes need owner-frozen external acceptance per project; none exist for the holdout projects.",
+  "Precision is from a reviewed sample by the implementing agent, not an independent reviewer.",
+  "Unmodelled categories: NoSQL injection, XSS, XXE, open redirect, prototype pollution, deserialization, SSRF, CVE scanning.",
+  "JavaScript hard-coded credentials are not extracted (nodejs-goof G6 missed)."
+ ]
+}

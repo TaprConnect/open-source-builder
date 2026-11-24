@@ -1,0 +1,18 @@
+{"reviewer": "implementing agent (not independent); each verdict cites the inspected line",
+ "detections": {"G1": "FN", "G2": "FN", "G3": "FN", "G4": "FN", "G5": "FN", "G6": "FN", "G7": "FN", "G8": "FN", "G9": "FN",
+                "P1": "TP", "P2": "TP", "P3": "FN", "P4": "TP", "P5": "FN", "P6": "unverified", "P7": "FN", "P8": "FN",
+                "P9": "FN", "P10": "FN", "P11": "unverified", "P12": "FN"},
+ "reported_security_findings": [
+  {"project": "nodejs-goof", "domain": "WebDefences", "where": "routes/index.js:217", "verdict": "FP", "why": "Mongoose Query.exec(callback), not a shell exec"},
+  {"project": "pygoat", "domain": "WebDefences", "where": "dockerized_labs/a9_uckv_lab/app.py:89", "verdict": "FP", "why": "Image.open on an upload object; the documented issue is a vulnerable Pillow version, not path traversal"},
+  {"project": "pygoat", "domain": "WebDefences", "where": "dockerized_labs/command_injection_lab/app.py:29", "verdict": "TP", "why": "Popen(f-string with form input, shell=True)"},
+  {"project": "pygoat", "domain": "WebDefences", "where": "dockerized_labs/command_injection_lab/app.py:49", "verdict": "TP", "why": "eval(form input)"},
+  {"project": "pygoat", "domain": "WebDefences", "where": "dockerized_labs/sql_injection_lab/app.py:57", "verdict": "TP", "why": "execute(query built from input)"},
+  {"project": "pygoat", "domain": "WebDefences", "where": "dockerized_labs/ssrf_lab/app.py:22", "verdict": "TP", "why": "open(os.path.join(dir, form input)): directory traversal"},
+  {"project": "pygoat", "domain": "Secrets", "where": "challenge/labs/bopla_lab/app.py:48", "verdict": "TP", "why": "hard-coded password"},
+  {"project": "pygoat", "domain": "Secrets", "where": "challenge/labs/bopla_lab/app.py:50", "verdict": "TP", "why": "hard-coded password"},
+  {"project": "pygoat", "domain": "Secrets", "where": "challenge/labs/business_logic_lab/app.py:5", "verdict": "TP", "why": "hard-coded Flask secret_key"},
+  {"project": "pygoat", "domain": "Secrets", "where": "challenge/labs/security_headers_lab/app.py:15", "verdict": "TP", "why": "hard-coded Flask secret_key"},
+  {"project": "pygoat", "domain": "Secrets", "where": "challenge/labs/security_headers_lab/app.py:20", "verdict": "TP", "why": "hard-coded password"},
+  {"project": "pygoat", "domain": "Secrets", "where": "dockerized_labs/auth_failure_lab/app.py:44", "verdict": "TP", "why": "hard-coded admin password"}],
+ "not_reviewed": "Identity (38 route findings), Tenancy (15), Configuration (7), Observability (28) and 27 of 33 Secrets findings were not individually verified"}
